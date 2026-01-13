@@ -27,7 +27,7 @@
    - Principal IC review of risks/edge cases.
    - If needed, iterate on mapping or docs.
 
-6. **Finalize and push** (Not Started)
+6. **Finalize and push** (Done)
   - Run tests.
   - Commit and push to `origin`.
 
