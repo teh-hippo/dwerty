@@ -39,6 +39,20 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
    QMK_DIR=~/qmk_firmware ./scripts/build.sh
    ```
 
+## Updating QMK (firmware base)
+Use this when you want a newer QMK firmware version while keeping your keymap overlay clean:
+```bash
+QMK_DIR=~/qmk_firmware ./scripts/update_qmk.sh
+```
+
+Notes:
+- The script refuses to update if your QMK repo has local changes; keep QMK clean and use this repo for keymaps.
+- It uses the remote default branch unless you set `QMK_BRANCH`, and performs a fast‑forward pull.
+- It verifies `keychron/v6_max` still exists after the update.
+
+## Updating QMK CLI (optional)
+If you use QMK CLI, update it with the method you installed it with (e.g., pip/uv/Homebrew) and confirm `qmk` is on your PATH.
+
 ## Flashing to the keyboard
 - Put the keyboard in **Cable mode** and enter bootloader mode by holding **Esc** while plugging in.
 - Then flash using QMK CLI or `make`:
@@ -104,6 +118,8 @@ Run the unit tests that verify the shortcut remap table:
 
 ## References
 - QMK setup/build docs: https://docs.qmk.fm/#/newbs_getting_started and https://docs.qmk.fm/#/getting_started_make_guide
+- QMK CLI install/upgrade: https://docs.qmk.fm/cli/overview
+- Git pull (fast‑forward): https://git-scm.com/docs/git-pull
 - QMK Toolbox: https://github.com/qmk/qmk_toolbox
 - WSL USB device passthrough (usbipd): https://learn.microsoft.com/windows/wsl/connect-usb
 - Keychron V6 Max QMK fork: https://github.com/Keychron/qmk_firmware

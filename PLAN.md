@@ -42,3 +42,5 @@
    - Document decision in `APPROACH.md` and update setup scripts.
 2. **WSL-friendly flashing** (Done)
    - Add one-command flash helper and WSL passthrough instructions.
+3. **QMK upgrade workflow** (Done)
+   - Add `scripts/update_qmk.sh` and document upgrade steps.
