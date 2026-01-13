@@ -23,6 +23,7 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 - When any of Ctrl/Alt/GUI is held, remap to Qwerty positions for shortcuts.
 - Shift alone must NOT trigger Qwerty remap (unless user explicitly asks).
 - Remap applies only to base layers.
+- Always unregister remapped keys on release even if modifiers are released first.
 
 ## Files of record
 - Keymap lives at `keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/`.

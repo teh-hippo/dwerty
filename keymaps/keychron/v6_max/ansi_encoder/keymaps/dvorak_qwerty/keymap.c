@@ -114,6 +114,18 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return false;
     }
 
+    uint8_t row = record->event.key.row;
+    uint8_t col = record->event.key.col;
+
+    if (!record->event.pressed) {
+        if (qwerty_shortcut_active[row][col] != KC_NO) {
+            unregister_code16(qwerty_shortcut_active[row][col]);
+            qwerty_shortcut_active[row][col] = KC_NO;
+            return false;
+        }
+        return true;
+    }
+
     if (!qwerty_shortcuts_layer_active() || !qwerty_shortcuts_mods_active()) {
         return true;
     }
@@ -123,19 +135,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
 
-    uint8_t row = record->event.key.row;
-    uint8_t col = record->event.key.col;
-
-    if (record->event.pressed) {
-        qwerty_shortcut_active[row][col] = mapped;
-        register_code16(mapped);
-        return false;
-    }
-
-    if (qwerty_shortcut_active[row][col] != KC_NO) {
-        unregister_code16(qwerty_shortcut_active[row][col]);
-        qwerty_shortcut_active[row][col] = KC_NO;
-    }
-
+    qwerty_shortcut_active[row][col] = mapped;
+    register_code16(mapped);
     return false;
 }

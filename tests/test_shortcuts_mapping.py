@@ -60,6 +60,34 @@ class ShortcutMappingTests(unittest.TestCase):
         self.assertIn("MOD_MASK_GUI", mask_line)
         self.assertNotIn("MOD_MASK_SHIFT", mask_line)
 
+    def test_release_path_runs_before_mod_checks(self) -> None:
+        text = KEYMAP_PATH.read_text(encoding="utf-8")
+        func_start = text.find("bool process_record_user")
+        self.assertNotEqual(func_start, -1, "process_record_user not found")
+
+        brace_start = text.find("{", func_start)
+        self.assertNotEqual(brace_start, -1, "process_record_user body not found")
+
+        depth = 0
+        func_end = -1
+        for idx in range(brace_start, len(text)):
+            if text[idx] == "{":
+                depth += 1
+            elif text[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    func_end = idx
+                    break
+
+        self.assertNotEqual(func_end, -1, "process_record_user body not closed")
+        body = text[brace_start:func_end]
+
+        release_idx = body.find("if (!record->event.pressed)")
+        layer_idx = body.find("qwerty_shortcuts_layer_active")
+        self.assertNotEqual(release_idx, -1, "release handling not found in process_record_user")
+        self.assertNotEqual(layer_idx, -1, "layer check not found in process_record_user")
+        self.assertLess(release_idx, layer_idx, "release handling should occur before mod checks")
+
 
 if __name__ == "__main__":
     unittest.main()

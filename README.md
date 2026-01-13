@@ -8,6 +8,10 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - Maintains stock Keychron media keys and encoder (volume on base, RGB on Fn).
 - Supports both Mac and Windows base layers (hardware toggle compatible).
 
+## Implementation notes
+- Shortcut remap is active only on base layers and releases cleanly even if modifiers are released first.
+- Mod detection uses QMK modifier masks (Ctrl/Alt/GUI); Shift alone does not trigger remaps.
+
 ## Requirements
 - Keychron QMK fork: `Keychron/qmk_firmware` on the `wireless_playground` branch.
 - QMK toolchain installed (QMK CLI or the `make`-based toolchain).
