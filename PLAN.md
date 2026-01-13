@@ -40,3 +40,5 @@
 1. **Re-evaluate codebase cleanliness** (Done)
    - Compare upstream QMK vs Keychron fork for V6 Max support.
    - Document decision in `APPROACH.md` and update setup scripts.
+2. **WSL-friendly flashing** (Done)
+   - Add one-command flash helper and WSL passthrough instructions.

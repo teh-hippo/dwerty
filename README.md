@@ -48,6 +48,43 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 
 If you prefer QMK Toolbox, you can compile first (step 3) and then flash the produced `.bin` from the QMK build output.
 
+## One-command update + flash
+```bash
+QMK_DIR=~/qmk_firmware ./scripts/flash_easy.sh
+```
+This runs install → build → flash in order.
+
+## WSL support
+### Option A (simplest): build in WSL, flash in Windows
+1. Build in WSL:
+   ```bash
+   QMK_DIR=~/qmk_firmware ./scripts/build.sh
+   ```
+2. Copy the `.bin` to Windows (e.g., `\\wsl$\\Ubuntu\\home\\<you>\\qmk_firmware\\.build\\...`) and flash with **QMK Toolbox** on Windows.
+
+### Option B (advanced): USB passthrough with usbipd-win
+1. Install **usbipd-win** on Windows and ensure you are using WSL 2.
+2. List devices and locate the V6 Max in Windows PowerShell:
+   ```powershell
+   usbipd list
+   ```
+3. Attach the device to WSL (Admin PowerShell):
+   ```powershell
+   .\\scripts\\wsl_attach_usb.ps1 -BusId <BUSID>
+   ```
+4. In WSL, confirm it is visible:
+   ```bash
+   lsusb
+   ```
+5. Flash from WSL:
+   ```bash
+   QMK_DIR=~/qmk_firmware ./scripts/flash.sh
+   ```
+6. Detach when done:
+   ```powershell
+   usbipd detach --busid <BUSID>
+   ```
+
 ## Tests
 Run the unit tests that verify the shortcut remap table:
 ```bash
@@ -67,5 +104,7 @@ Run the unit tests that verify the shortcut remap table:
 
 ## References
 - QMK setup/build docs: https://docs.qmk.fm/#/newbs_getting_started and https://docs.qmk.fm/#/getting_started_make_guide
+- QMK Toolbox: https://github.com/qmk/qmk_toolbox
+- WSL USB device passthrough (usbipd): https://learn.microsoft.com/windows/wsl/connect-usb
 - Keychron V6 Max QMK fork: https://github.com/Keychron/qmk_firmware
 - Keychron flashing/reset guide: https://www.keychron.com/pages/how-to-factory-reset-or-flash-firmware-for-your-keychron-qmk-via-enabled-keyboard
