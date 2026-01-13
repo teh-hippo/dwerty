@@ -35,3 +35,8 @@
 - Confirm keyboard variant (ANSI knob vs ISO/JIS) before flashing.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
 - Qwerty shortcut remap is disabled on Fn layers by design; adjust if needed.
+
+## Addendum (January 13, 2026)
+1. **Re-evaluate codebase cleanliness** (Done)
+   - Compare upstream QMK vs Keychron fork for V6 Max support.
+   - Document decision in `APPROACH.md` and update setup scripts.

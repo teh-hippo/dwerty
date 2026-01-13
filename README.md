@@ -13,21 +13,26 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - Mod detection uses QMK modifier masks (Ctrl/Alt/GUI); Shift alone does not trigger remaps.
 
 ## Requirements
-- Keychron QMK fork: `Keychron/qmk_firmware` on the `wireless_playground` branch.
 - QMK toolchain installed (QMK CLI or the `make`-based toolchain).
+- QMK codebase with `keychron/v6_max` support. See `APPROACH.md`.
 
 ## Setup
-1. Clone Keychron’s QMK fork and check out the right branch:
+1. Clone a QMK tree that supports V6 Max (recommended defaults shown):
    ```bash
-   git clone https://github.com/Keychron/qmk_firmware.git
-   cd qmk_firmware
-   git checkout wireless_playground
+   ./scripts/setup_qmk.sh
+   ```
+
+   This defaults to the Keychron fork (`Keychron/qmk_firmware`, `wireless_playground`). If you want to try upstream QMK:
+   ```bash
+   ./scripts/setup_qmk.sh --upstream
    ```
 
 2. Copy the keymap into the QMK tree:
    ```bash
    QMK_DIR=~/qmk_firmware ./scripts/install_keymap.sh
    ```
+
+   `QMK_DIR` defaults to `~/qmk_firmware` if not set.
 
 3. Build the firmware:
    ```bash
