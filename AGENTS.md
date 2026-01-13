@@ -1,0 +1,34 @@
+# AGENTS.md
+
+## Purpose
+This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak typing with Qwerty-position shortcuts (e.g., Ctrl+C at the Qwerty C key). Agents must keep changes small, tested, and well-documented.
+
+## Operating rules
+- Work in small, reviewable steps. Prefer tidy diffs and minimal churn.
+- Update `PLAN.md` after completing each step and keep status accurate.
+- Update `README.md` whenever behavior, setup, or flashing steps change.
+- Run available tests after each change when possible (`python -m unittest`).
+- Keep scripts idempotent and safe; avoid destructive commands.
+- After tests pass, commit and push to `origin`.
+
+## Target constraints
+- Target keyboard: Keychron V6 Max (ANSI knob assumed unless user says ISO/JIS).
+- Firmware base: Keychron QMK fork `Keychron/qmk_firmware`, branch `wireless_playground`.
+- Use the layout macro from `keychron/v6_max/ansi_encoder` (`LAYOUT_ansi_109`).
+- Maintain encoder (knob) and media key behavior from the stock keymap.
+
+## Layout behavior
+- Base layers are Dvorak (firmware-level).
+- Assume the host OS remains in US Qwerty unless the user explicitly wants OS-level Dvorak.
+- When any of Ctrl/Alt/GUI is held, remap to Qwerty positions for shortcuts.
+- Shift alone must NOT trigger Qwerty remap (unless user explicitly asks).
+- Remap applies only to base layers.
+
+## Files of record
+- Keymap lives at `keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/`.
+- Tests live in `tests/` and validate shortcut mappings.
+- Scripts live in `scripts/` and handle install/build/flash scaffolding.
+
+## Continuous improvement
+- If assumptions are wrong (layout variant, OS expectations, shortcut behavior), update this file immediately with the corrected rule.
+- If any manual step is error-prone, add a scripted helper and document it.
