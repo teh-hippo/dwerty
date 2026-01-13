@@ -16,7 +16,8 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 - Prefer upstream QMK when it supports V6 Max; otherwise use Keychron QMK fork `Keychron/qmk_firmware` on `wireless_playground` (see `APPROACH.md`).
 - Use the layout macro from `keychron/v6_max/ansi_encoder` (`LAYOUT_ansi_109`).
 - Maintain encoder (knob) and media key behavior from the stock keymap.
- - Keep the QMK repo clean; upgrade using `scripts/update_qmk.sh` and keep keymaps in this repo.
+- Keep the QMK repo clean; upgrade using `scripts/update_qmk.sh` and keep keymaps in this repo.
+- Default update path stays on the current QMK branch unless `QMK_BRANCH` is set.
 
 ## Layout behavior
 - Base layers are Dvorak (firmware-level).

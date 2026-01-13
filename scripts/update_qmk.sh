@@ -11,11 +11,17 @@ if [[ ! -d "${QMK_DIR}/.git" ]]; then
 fi
 
 if [[ -z "${BRANCH}" ]]; then
-  default_ref=$(git -C "${QMK_DIR}" symbolic-ref --quiet --short "refs/remotes/${REMOTE}/HEAD" || true)
-  if [[ -n "${default_ref}" ]]; then
-    BRANCH="${default_ref#${REMOTE}/}"
+  current_branch=$(git -C "${QMK_DIR}" rev-parse --abbrev-ref HEAD)
+  if [[ "${current_branch}" != "HEAD" ]]; then
+    BRANCH="${current_branch}"
   else
-    BRANCH=$(git -C "${QMK_DIR}" rev-parse --abbrev-ref HEAD)
+    default_ref=$(git -C "${QMK_DIR}" symbolic-ref --quiet --short "refs/remotes/${REMOTE}/HEAD" || true)
+    if [[ -n "${default_ref}" ]]; then
+      BRANCH="${default_ref#${REMOTE}/}"
+    else
+      echo "Cannot determine branch; set QMK_BRANCH explicitly." >&2
+      exit 1
+    fi
   fi
 fi
 

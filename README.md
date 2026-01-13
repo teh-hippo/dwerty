@@ -47,7 +47,7 @@ QMK_DIR=~/qmk_firmware ./scripts/update_qmk.sh
 
 Notes:
 - The script refuses to update if your QMK repo has local changes; keep QMK clean and use this repo for keymaps.
-- It uses the remote default branch unless you set `QMK_BRANCH`, and performs a fast‑forward pull.
+- It uses the current branch unless you set `QMK_BRANCH`, and performs a fast‑forward pull.
 - It verifies `keychron/v6_max` still exists after the update.
 
 ## Updating QMK CLI (optional)
