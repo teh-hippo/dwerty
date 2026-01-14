@@ -102,6 +102,16 @@ class IntegrationSimulationTests(unittest.TestCase):
         self.assertEqual(action, "unregister")
         self.assertEqual(key, self.mapping["KC_J"])
 
+    def test_layers_present(self) -> None:
+        for layer in ("MAC_BASE", "MAC_FN", "WIN_BASE", "WIN_FN"):
+            self.assertIn(layer, self.layers)
+
+    def test_shift_only_does_not_remap(self) -> None:
+        mods = {"MOD_MASK_SHIFT"}
+        action, key = self.fw.process("KC_J", True, "WIN_BASE", mods)
+        self.assertEqual(action, "pass")
+        self.assertIsNone(key)
+
     def test_mac_command_only(self) -> None:
         mods = {"MOD_MASK_CTRL"}
         action, key = self.fw.process("KC_J", True, "MAC_BASE", mods)
@@ -112,6 +122,23 @@ class IntegrationSimulationTests(unittest.TestCase):
         action, key = self.fw.process("KC_J", True, "MAC_BASE", mods)
         self.assertEqual(action, "register")
         self.assertEqual(key, self.mapping["KC_J"])
+
+    def test_mac_alt_does_not_remap(self) -> None:
+        mods = {"MOD_MASK_ALT"}
+        action, key = self.fw.process("KC_J", True, "MAC_BASE", mods)
+        self.assertEqual(action, "pass")
+        self.assertIsNone(key)
+
+    def test_win_alt_and_gui_remap(self) -> None:
+        for mod in ("MOD_MASK_ALT", "MOD_MASK_GUI"):
+            mods = {mod}
+            action, key = self.fw.process("KC_J", True, "WIN_BASE", mods)
+            self.assertEqual(action, "register")
+            self.assertEqual(key, self.mapping["KC_J"])
+
+            action, key = self.fw.process("KC_J", False, "WIN_BASE", set())
+            self.assertEqual(action, "unregister")
+            self.assertEqual(key, self.mapping["KC_J"])
 
     def test_fn_layers_do_not_remap(self) -> None:
         mods = {"MOD_MASK_CTRL"}

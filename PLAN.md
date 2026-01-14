@@ -32,6 +32,13 @@
    - Perform the tooling/framework audit with sources.
    - Consolidate findings into `README.md` and remove `EVALUATION.md`.
 
+7. **Integration test plan + expanded vectors** (Done)
+   - Add `docs/INTEGRATION_TESTING.md` to document phases and constraints.
+   - Expand integration simulation coverage (shift-only, alt/gui, layer presence).
+
+8. **Temporarily disable CI workflows** (Done)
+   - Keep GitHub Actions disabled until final enablement pass.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.

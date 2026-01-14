@@ -1,8 +1,6 @@
 name: tests
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,6 +8,7 @@ permissions:
 
 jobs:
   python-tests:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

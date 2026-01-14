@@ -12,7 +12,7 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - **Updates**: able to update to latest framework versions when required.
 - **Safety**: documented rollback path.
 - **Ops**: WSL-first dev/testing and flashing instructions; CI workflows for tests.
-- **Approach**: evaluate frameworks/tooling vs manufacturer guidance (see `EVALUATION.md`).
+- **Approach**: maintain an audit of frameworks/tooling vs manufacturer guidance in this README.
 
 ## Behavior (Windows-first)
 - **Windows base layers**: when **Ctrl/Alt/GUI** is held, send Qwerty-position keycodes for shortcuts.
@@ -128,6 +128,9 @@ Integration tests (no hardware required):
 ./scripts/test_integration.sh
 ```
 These tests simulate modifier + layer behavior in a dummy firmware model. They do not emulate USB/Bluetooth timing, wireless stacks, or true hardware scans.
+
+Integration test plan and expansion notes:
+- See `docs/INTEGRATION_TESTING.md`.
 
 Optional QMK build check (network + toolchain required):
 ```bash
