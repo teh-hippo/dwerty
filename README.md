@@ -117,6 +117,18 @@ Notes:
    usbipd detach --busid <BUSID>
    ```
 
+### WSL + usbipd UAT workflow (manual smoke test)
+Use this when you want a quick end-to-end validation without extra tooling.
+1. Build the firmware in WSL (`./scripts/build.sh`).
+2. Enter bootloader mode (hold **Esc** while plugging in the USB cable).
+3. Attach with usbipd-win and confirm with `lsusb`.
+4. Flash from WSL (`./scripts/flash.sh`).
+5. Validate on Windows:
+   - Dvorak typing on base layer (OS stays US Qwerty).
+   - Ctrl/Alt/Win shortcuts map to Qwerty positions.
+   - Fn layers do not remap.
+   - Encoder and media keys match stock behavior.
+
 ## Tests
 All tests (unit + integration simulation):
 ```bash
