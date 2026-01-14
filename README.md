@@ -68,6 +68,11 @@ sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programme
    QMK_DIR=~/qmk_firmware ./scripts/build.sh
    ```
 
+4. Optional: copy build artifacts into `./build/`:
+   ```bash
+   QMK_DIR=~/qmk_firmware ./scripts/build_artifacts.sh
+   ```
+
 ## Flashing
 ### Preferred: Keychron Launcher (official)
 - Use Keychron Launcher to flash the compiled `.bin` or official firmware.

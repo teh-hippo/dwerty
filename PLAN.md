@@ -69,6 +69,9 @@
 16. **Expand integration coverage** (Done)
     - Add macOS shortcut vectors and edge-case integration checks.
 
+17. **Local build artifacts** (Done)
+    - Add a helper to copy firmware artifacts into `./build`.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
