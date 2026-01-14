@@ -94,7 +94,7 @@ Notes:
    ```
 
 ## Tests
-Unit tests:
+All tests (unit + integration simulation):
 ```bash
 ./scripts/test.sh
 ```
@@ -102,6 +102,12 @@ Unit tests:
 Integration tests (no hardware required):
 ```bash
 ./scripts/test_integration.sh
+```
+These tests simulate modifier + layer behavior in a dummy firmware model. They do not emulate USB/Bluetooth timing, wireless stacks, or true hardware scans.
+
+Optional QMK build check (network + toolchain required):
+```bash
+./scripts/test_qmk_build.sh
 ```
 
 ## Customizing

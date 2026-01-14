@@ -16,12 +16,12 @@
    - Update unit tests for new modifier rules.
    - Refresh `README.md` with Windows-first guidance, WSL-first workflow, and rollback steps.
 
-3. **Integration tests + scripts** (In Progress)
+3. **Integration tests + scripts** (Done)
    - Add a host-side integration simulation for modifier remap sequences.
    - Add an optional QMK build check script (no hardware required).
    - Document integration test scope and limitations.
 
-4. **CI workflow** (Not Started)
+4. **CI workflow** (In Progress)
    - Add GitHub Actions to run unit + integration tests.
    - Enable the workflow only after all changes are complete.
 
