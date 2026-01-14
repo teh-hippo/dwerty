@@ -60,6 +60,9 @@
     - Install QMK into a venv in the container to avoid PEP 668 issues.
     - Ensure required Python modules are preinstalled for non-interactive builds.
 
+14. **Re-enable CI workflows** (Done)
+    - Restore GitHub Actions on push/PR.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
