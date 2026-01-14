@@ -14,7 +14,7 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 
 ## Requirements
 - QMK toolchain installed (QMK CLI or the `make`-based toolchain).
-- QMK codebase with `keychron/v6_max` support. See `APPROACH.md`.
+- QMK codebase with `keychron/v6_max` support. See `EVALUATION.md` for options.
 
 ## Setup
 1. Clone a QMK tree that supports V6 Max (recommended defaults shown):

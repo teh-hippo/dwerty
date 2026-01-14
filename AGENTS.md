@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Purpose
-This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak typing with Qwerty-position shortcuts (e.g., Ctrl+C at the Qwerty C key). Agents must keep changes small, tested, and well-documented.
+This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak typing with Qwerty-position shortcuts (macOS-style \"Dvorak - QWERTY Command\"). Windows behavior is the priority; macOS support should be kept when it is low effort. Agents must keep changes small, tested, and well-documented.
 
 ## Operating rules
 - Work in small, reviewable steps. Prefer tidy diffs and minimal churn.
@@ -13,16 +13,18 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 
 ## Target constraints
 - Target keyboard: Keychron V6 Max (ANSI knob assumed unless user says ISO/JIS).
-- Prefer upstream QMK when it supports V6 Max; otherwise use Keychron QMK fork `Keychron/qmk_firmware` on `wireless_playground` (see `APPROACH.md`).
+- Prefer upstream QMK when it supports V6 Max; otherwise use Keychron QMK fork `Keychron/qmk_firmware` on `wireless_playground` (see `EVALUATION.md`).
 - Use the layout macro from `keychron/v6_max/ansi_encoder` (`LAYOUT_ansi_109`).
 - Maintain encoder (knob) and media key behavior from the stock keymap.
+- Keep VIA enabled for post-flash UI editing and preserve Keychron Launcher compatibility.
 - Keep the QMK repo clean; upgrade using `scripts/update_qmk.sh` and keep keymaps in this repo.
 - Default update path stays on the current QMK branch unless `QMK_BRANCH` is set.
 
 ## Layout behavior
 - Base layers are Dvorak (firmware-level).
 - Assume the host OS remains in US Qwerty unless the user explicitly wants OS-level Dvorak.
-- When any of Ctrl/Alt/GUI is held, remap to Qwerty positions for shortcuts.
+- Windows-first: when Ctrl/Alt/GUI is held on Windows base layers, remap to Qwerty positions for shortcuts.
+- macOS: default to Command-only (GUI) remap to mimic \"Dvorak - QWERTY Command\".
 - Shift alone must NOT trigger Qwerty remap (unless user explicitly asks).
 - Remap applies only to base layers.
 - Always unregister remapped keys on release even if modifiers are released first.

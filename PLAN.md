@@ -6,41 +6,26 @@
 - When a step is Done, note any follow-up adjustments needed.
 
 ## Plan
-1. **Scaffold project docs and guardrails** (Done)
-   - Create/maintain `AGENTS.md`, `README.md`, and this plan.
-   - Record assumptions (ANSI knob, Qwerty shortcuts behavior).
+1. **Docs reset + decision record** (Done)
+   - Remove `APPROACH.md` and replace with `EVALUATION.md`.
+   - Align `AGENTS.md` and `README.md` references to the new evaluation.
 
-2. **Implement keymap + shortcut remap** (Done)
-   - Build Dvorak base for Mac/Win layers from the stock V6 Max keymap.
-   - Add Qwerty-position shortcut remap when Ctrl/Alt/GUI is held.
-   - Keep encoder/media behavior from stock keymap.
+2. **Firmware behavior + UI editing support** (In Progress)
+   - Implement Windows-first Dvorak-Qwerty shortcut behavior and Mac Command-only behavior.
+   - Enable VIA for post-flash UI editing and keep Keychron Launcher compatibility.
+   - Update unit tests for new modifier rules.
+   - Refresh `README.md` with Windows-first guidance, WSL-first workflow, and rollback steps.
 
-3. **Add tests and scripts** (Done)
-   - Unit tests to validate shortcut mapping coverage.
-   - Helper scripts for install/build/flash workflows.
+3. **Integration tests + scripts** (Not Started)
+   - Add a host-side integration simulation for modifier remap sequences.
+   - Add an optional QMK build check script (no hardware required).
+   - Document integration test scope and limitations.
 
-4. **Document build/flash + device install** (Done)
-   - Clear local build instructions.
-   - Clear device flashing instructions, including reset steps and cable mode.
+4. **CI workflow** (Not Started)
+   - Add GitHub Actions to run unit + integration tests.
+   - Enable the workflow only after all changes are complete.
 
-5. **Review + iterate** (Done)
-   - Principal IC review of risks/edge cases.
-   - If needed, iterate on mapping or docs.
-
-6. **Finalize and push** (Done)
-  - Run tests.
-  - Commit and push to `origin`.
-
-## Review notes (Principal IC)
-- Confirm keyboard variant (ANSI knob vs ISO/JIS) before flashing.
+## Review notes
+- Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
-- Qwerty shortcut remap is disabled on Fn layers by design; adjust if needed.
-
-## Addendum (January 13, 2026)
-1. **Re-evaluate codebase cleanliness** (Done)
-   - Compare upstream QMK vs Keychron fork for V6 Max support.
-   - Document decision in `APPROACH.md` and update setup scripts.
-2. **WSL-friendly flashing** (Done)
-   - Add one-command flash helper and WSL passthrough instructions.
-3. **QMK upgrade workflow** (Done)
-   - Add `scripts/update_qmk.sh` and document upgrade steps.
+- Qwerty shortcut remap is disabled on Fn layers by design; adjust only if requested.
