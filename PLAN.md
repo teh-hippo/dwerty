@@ -72,6 +72,9 @@
 17. **Local build artifacts** (Done)
     - Add a helper to copy firmware artifacts into `./build`.
 
+18. **Launcher support documentation** (Done)
+    - Document supported browsers and Launcher constraints for firmware flashing.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.

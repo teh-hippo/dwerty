@@ -77,6 +77,8 @@ sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programme
 ### Preferred: Keychron Launcher (official)
 - Use Keychron Launcher to flash the compiled `.bin` or official firmware.
 - Launcher requires a wired USB connection.
+ - Use the latest Chrome, Edge, or Opera for the Launcher web app.
+ - If the Launcher UI does not allow selecting a local `.bin`, use QMK Toolbox or the CLI flash path below.
 
 ### CLI (QMK CLI or make)
 ```bash
@@ -174,6 +176,10 @@ From inside the container you can run:
 2. In VS Code, install the **Dev Containers** extension.
 3. Open this repo and run: **Dev Containers: Reopen in Container**.
 4. The container uses the same `Containerfile` as the Podman scripts.
+
+## Keychron Launcher (web app) notes
+- Launcher is the official web-based firmware path and expects a wired connection.
+- Use Chrome, Edge, or Opera (latest) for best compatibility.
 
 ## Customizing
 - **Change shortcut modifier behavior:** edit `SHORTCUT_MOD_MASK_WIN` / `SHORTCUT_MOD_MASK_MAC` in
