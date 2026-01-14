@@ -52,13 +52,20 @@ class ShortcutMappingTests(unittest.TestCase):
         pairs = set(PAIR_RE.findall(block))
         self.assertEqual(pairs, EXPECTED)
 
-    def test_shortcut_mod_mask_excludes_shift(self) -> None:
+    def test_shortcut_mod_masks_exclude_shift(self) -> None:
         text = KEYMAP_PATH.read_text(encoding="utf-8")
-        mask_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK" in line), "")
-        self.assertIn("MOD_MASK_CTRL", mask_line)
-        self.assertIn("MOD_MASK_ALT", mask_line)
-        self.assertIn("MOD_MASK_GUI", mask_line)
-        self.assertNotIn("MOD_MASK_SHIFT", mask_line)
+        win_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK_WIN" in line), "")
+        mac_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK_MAC" in line), "")
+
+        self.assertIn("MOD_MASK_CTRL", win_line)
+        self.assertIn("MOD_MASK_ALT", win_line)
+        self.assertIn("MOD_MASK_GUI", win_line)
+        self.assertNotIn("MOD_MASK_SHIFT", win_line)
+
+        self.assertIn("MOD_MASK_GUI", mac_line)
+        self.assertNotIn("MOD_MASK_CTRL", mac_line)
+        self.assertNotIn("MOD_MASK_ALT", mac_line)
+        self.assertNotIn("MOD_MASK_SHIFT", mac_line)
 
     def test_release_path_runs_before_mod_checks(self) -> None:
         text = KEYMAP_PATH.read_text(encoding="utf-8")

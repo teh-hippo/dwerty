@@ -10,13 +10,13 @@
    - Remove `APPROACH.md` and replace with `EVALUATION.md`.
    - Align `AGENTS.md` and `README.md` references to the new evaluation.
 
-2. **Firmware behavior + UI editing support** (In Progress)
+2. **Firmware behavior + UI editing support** (Done)
    - Implement Windows-first Dvorak-Qwerty shortcut behavior and Mac Command-only behavior.
    - Enable VIA for post-flash UI editing and keep Keychron Launcher compatibility.
    - Update unit tests for new modifier rules.
    - Refresh `README.md` with Windows-first guidance, WSL-first workflow, and rollback steps.
 
-3. **Integration tests + scripts** (Not Started)
+3. **Integration tests + scripts** (In Progress)
    - Add a host-side integration simulation for modifier remap sequences.
    - Add an optional QMK build check script (no hardware required).
    - Document integration test scope and limitations.

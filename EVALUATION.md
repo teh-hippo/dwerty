@@ -6,6 +6,7 @@ We want firmware-level Dvorak typing with Qwerty-position shortcuts ("Dvorak - Q
 ## Manufacturer guidance (Keychron)
 - Keychron recommends the Keychron Launcher for firmware updates and remapping, and provides V6 Max firmware plus VIA JSON downloads on its support pages.
 - The Keychron Launcher is a web app that supports remapping, macros, and firmware flashing for QMK/ZMK keyboards, and requires a wired USB connection.
+- The V6 Max firmware page shows vendor firmware versions with dates, which is the closest official indicator of update cadence for this board.
 
 References:
 - https://www.keychron.com/pages/firmware-and-json-files-of-the-keychron-qmk-keyboards
@@ -39,7 +40,7 @@ Pros
 - Most current QMK features, fixes, and community support.
 
 Cons
-- As of January 2026, upstream does not include Keychron V6 Max definitions.
+- As of January 14, 2026, upstream does not include Keychron V6 Max definitions.
 - Requires a full keyboard port (wireless, MCU, matrix, encoder, lighting) which is high effort and high risk.
 
 Verdict: Not viable until upstream supports V6 Max.

@@ -25,7 +25,9 @@ enum layers {
 };
 
 #define QD_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#define SHORTCUT_MOD_MASK (MOD_MASK_CTRL | MOD_MASK_ALT | MOD_MASK_GUI)
+// Windows uses Ctrl/Alt/GUI; macOS defaults to Command-only to match Dvorak-Qwerty Command.
+#define SHORTCUT_MOD_MASK_WIN (MOD_MASK_CTRL | MOD_MASK_ALT | MOD_MASK_GUI)
+#define SHORTCUT_MOD_MASK_MAC (MOD_MASK_GUI)
 
 typedef struct {
     uint16_t dvorak;
@@ -48,14 +50,23 @@ static const qwerty_shortcut_map_t qwerty_shortcut_map[] = {
 
 static uint16_t qwerty_shortcut_active[MATRIX_ROWS][MATRIX_COLS];
 
-static bool qwerty_shortcuts_layer_active(void) {
-    uint8_t layer = get_highest_layer(layer_state);
+static bool qwerty_shortcuts_layer_active(uint8_t layer) {
     return layer == MAC_BASE || layer == WIN_BASE;
 }
 
-static bool qwerty_shortcuts_mods_active(void) {
+static uint8_t qwerty_shortcuts_mod_mask(uint8_t layer) {
+    if (layer == MAC_BASE) {
+        return SHORTCUT_MOD_MASK_MAC;
+    }
+    if (layer == WIN_BASE) {
+        return SHORTCUT_MOD_MASK_WIN;
+    }
+    return 0;
+}
+
+static bool qwerty_shortcuts_mods_active(uint8_t layer) {
     uint8_t mods = get_mods() | get_oneshot_mods() | get_weak_mods();
-    return (mods & SHORTCUT_MOD_MASK) != 0;
+    return (mods & qwerty_shortcuts_mod_mask(layer)) != 0;
 }
 
 static uint16_t qwerty_shortcut_lookup(uint16_t keycode) {
@@ -126,7 +137,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
 
-    if (!qwerty_shortcuts_layer_active() || !qwerty_shortcuts_mods_active()) {
+    uint8_t layer = get_highest_layer(layer_state);
+
+    if (!qwerty_shortcuts_layer_active(layer) || !qwerty_shortcuts_mods_active(layer)) {
         return true;
     }
 
