@@ -10,19 +10,14 @@
    - Location: `tests/test_integration_simulation.py`
    - Focus: modifier triggers, base-layer-only enforcement, and release behavior.
    - Run: `./scripts/test_integration.sh`
+   - Includes common Windows shortcut vectors and ensures unmapped keys pass through.
 
-## Planned expansion (still no deps by default)
-2. **Shortcut vector table tests**
-   - Expand integration tests to include common Windows shortcuts (e.g., Ctrl+C/V/X/Z/A/S/F) and macOS Command equivalents.
-   - Verify Shift-only does not trigger remap and that non-base layers never remap.
-   - Note: macOS Command vector coverage will be added later; keep Windows as the primary target.
-
-3. **Optional build gate (requires QMK toolchain + network)**
+2. **Optional build gate** (requires QMK toolchain + network)
    - Script: `./scripts/test_qmk_build.sh`
    - Purpose: ensure keymap compiles against the chosen QMK tree.
    - Not part of default test run until dependencies are installed.
 
-4. **Optional hardware-in-the-loop (HIL) smoke tests**
+3. **Optional hardware-in-the-loop (HIL) smoke tests**
    - Use WSL + `usbipd-win` to attach the keyboard to WSL.
    - Flash the test build and validate shortcuts via manual UAT.
    - Automated UI checks can be added later (AutoHotkey/PowerShell) if needed.
@@ -40,5 +35,5 @@
 6. Optional macOS sanity check (later): Command-only remap behavior.
 
 ## Notes
-- Phase 2 is intentionally a simulation to keep tests fast and dependency-free.
-- Phases 3 and 4 are opt-in; they remain documented but disabled by default.
+- macOS shortcut vector coverage is intentionally deferred.
+- Optional checks are documented but remain opt-in by default.

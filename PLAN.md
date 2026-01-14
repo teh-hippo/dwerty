@@ -7,8 +7,8 @@
 
 ## Plan
 1. **Docs reset + decision record** (Done)
-   - Remove `APPROACH.md` and replace with `EVALUATION.md`.
-   - Align `AGENTS.md` and `README.md` references to the new evaluation.
+   - Remove `APPROACH.md` and consolidate the audit into `README.md`.
+   - Align `AGENTS.md` and `README.md` references to the audit.
 
 2. **Firmware behavior + UI editing support** (Done)
    - Implement Windows-first Dvorak-Qwerty shortcut behavior and Mac Command-only behavior.
@@ -62,6 +62,9 @@
 
 14. **Re-enable CI workflows** (Done)
     - Restore GitHub Actions on push/PR.
+
+15. **Markdown cleanup** (Done)
+    - Remove stale plans and reduce duplicate checklists across docs.
 
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
