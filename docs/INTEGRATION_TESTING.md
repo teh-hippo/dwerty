@@ -35,5 +35,4 @@
 6. Optional macOS sanity check (later): Command-only remap behavior.
 
 ## Notes
-- macOS shortcut vector coverage is intentionally deferred.
 - Optional checks are documented but remain opt-in by default.
