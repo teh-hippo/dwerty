@@ -21,9 +21,8 @@
    - Add an optional QMK build check script (no hardware required).
    - Document integration test scope and limitations.
 
-4. **CI workflow** (In Progress)
+4. **CI workflow** (Done)
    - Add GitHub Actions to run unit + integration tests.
-   - Enable the workflow only after all changes are complete.
 
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
