@@ -11,9 +11,20 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 - Keep scripts idempotent and safe; avoid destructive commands.
 - After tests pass, commit and push to `origin`.
 
-## Target constraints
+## Project requirements (do not regress)
 - Target keyboard: Keychron V6 Max (ANSI knob assumed unless user says ISO/JIS).
-- Prefer upstream QMK when it supports V6 Max; otherwise use Keychron QMK fork `Keychron/qmk_firmware` on `wireless_playground` (see `EVALUATION.md`).
+- Firmware-level Dvorak with Qwerty-position shortcuts; OS remains US Qwerty.
+- Windows-first behavior; macOS support only when low effort.
+- Preserve full hardware parity (all keys, encoder, media, lighting effects).
+- Support UI-based editing after flash (VIA and Keychron Launcher compatibility).
+- Provide unit tests and integration tests (no-hardware when possible).
+- Provide rollback instructions and WSL-first workflow + flashing guidance.
+- Keep CI workflows for tests.
+- Allow framework updates to latest versions when required.
+
+## Approach and mindset
+- Keep `EVALUATION.md` as the source of truth for framework/tooling choice; compare manufacturer recommendations vs tooling reality using primary sources.
+- Prefer upstream QMK when it supports V6 Max; otherwise use Keychron QMK fork `Keychron/qmk_firmware` on `wireless_playground`.
 - Use the layout macro from `keychron/v6_max/ansi_encoder` (`LAYOUT_ansi_109`).
 - Maintain encoder (knob) and media key behavior from the stock keymap.
 - Keep VIA enabled for post-flash UI editing and preserve Keychron Launcher compatibility.

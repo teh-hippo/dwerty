@@ -2,6 +2,18 @@
 
 Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty. Windows behavior is the priority; macOS support is included where it is easy.
 
+## Project requirements
+- **Target**: Keychron V6 Max (ANSI knob unless otherwise specified).
+- **Behavior**: firmware-level Dvorak with Qwerty-position shortcuts (“Dvorak‑QWERTY Command”), OS remains US Qwerty.
+- **Platforms**: Windows first; macOS supported when low effort.
+- **Hardware parity**: preserve all keys, encoder, media, and lighting effects.
+- **UI editing**: post‑flash UI editing via VIA/Keychron Launcher (or UI‑only flow).
+- **Testing**: unit tests and integration tests (no hardware required when possible).
+- **Updates**: able to update to latest framework versions when required.
+- **Safety**: documented rollback path.
+- **Ops**: WSL-first dev/testing and flashing instructions; CI workflows for tests.
+- **Approach**: evaluate frameworks/tooling vs manufacturer guidance (see `EVALUATION.md`).
+
 ## Behavior (Windows-first)
 - **Windows base layers**: when **Ctrl/Alt/GUI** is held, send Qwerty-position keycodes for shortcuts.
 - **macOS base layers**: when **Command (GUI)** is held, send Qwerty-position keycodes (mirrors macOS "Dvorak - QWERTY Command").
@@ -17,7 +29,7 @@ This keymap is **VIA-enabled** and **Launcher-compatible**:
 - **Keychron Launcher (official)**: recommended for remaps and firmware flashing. Requires a wired USB connection and a Chromium-based browser.
 - **VIA**: supported for post-flash edits. If VIA does not recognize the board, load the V6 Max JSON from Keychron's firmware/JSON page.
 
-## Requirements
+## Build prerequisites
 - QMK toolchain installed (QMK CLI or `make`).
 - QMK tree with `keychron/v6_max` support (Keychron fork by default).
 

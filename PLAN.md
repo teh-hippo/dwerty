@@ -24,6 +24,10 @@
 4. **CI workflow** (Done)
    - Add GitHub Actions to run unit + integration tests.
 
+5. **Requirements alignment** (Done)
+   - Put project requirements in `README.md` and `AGENTS.md`.
+   - Separate project requirements vs agent mindset in `AGENTS.md`.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
