@@ -22,7 +22,19 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - Remapped keys are always unregistered on release, even if modifiers were released first.
 - Encoder and media behavior match the stock keymap.
 
-If you want the full rationale and tooling evaluation (Launcher, VIA, QMK, TMK, etc.), see `EVALUATION.md`.
+Tooling decision and audit summary is recorded below.
+
+## Tooling decision (as of January 14, 2026)
+- **Manufacturer guidance**: Keychron’s official workflow for firmware flashing uses the Keychron Launcher in Cable mode and requires a bootloader entry (hold Esc while plugging in). This is the supported path for recovery and rollback.
+- **Official firmware cadence**: The V6 Max firmware page lists versions up to **1.1.2** (May 15, 2025) with fixes for debounce, lighting effects, and knob behavior. This is the last official release date we should assume as a baseline.
+- **QMK upstream vs Keychron fork**:
+  - Upstream QMK still lacks `keychron/v6_max` support (the upstream `info.json` path 404s).
+  - Keychron’s fork contains V6 Max definitions (the `info.json` is present on `wireless_playground`).
+  - Keychron’s `qmk_firmware` fork shows recent activity (updated Dec 22, 2025 on the Keychron GitHub org listing), so it is not abandoned, but it may still lag upstream QMK.
+- **VIA support**: VIA requires firmware-side enablement (`VIA_ENABLE = yes`) and a compatible keymap target. This repo enables VIA in the keymap so post-flash UI editing is available.
+- **TMK context**: QMK is a fork of TMK and builds on it with a larger feature set and broader keyboard support; TMK alone would require a custom port for V6 Max.
+
+Decision: use the Keychron QMK fork (`wireless_playground`) until upstream adds V6 Max; keep Launcher and VIA compatibility for UI edits and rollback.
 
 ## UI-based editing after flash
 This keymap is **VIA-enabled** and **Launcher-compatible**:

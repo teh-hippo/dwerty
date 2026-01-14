@@ -28,6 +28,10 @@
    - Put project requirements in `README.md` and `AGENTS.md`.
    - Separate project requirements vs agent mindset in `AGENTS.md`.
 
+6. **Evaluation audit + consolidation** (Done)
+   - Perform the tooling/framework audit with sources.
+   - Consolidate findings into `README.md` and remove `EVALUATION.md`.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
