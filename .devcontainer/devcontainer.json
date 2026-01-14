@@ -13,6 +13,5 @@
       ]
     }
   },
-  "remoteUser": "root",
-  "postCreateCommand": "python3 -m pip install --no-cache-dir qmk"
+  "remoteUser": "root"
 }

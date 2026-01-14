@@ -23,6 +23,9 @@ RUN apt-get update && \
       pkg-config \
       && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir qmk
+RUN python3 -m venv /opt/qmk-venv && \
+    /opt/qmk-venv/bin/pip install --no-cache-dir qmk appdirs
+
+ENV PATH="/opt/qmk-venv/bin:${PATH}"
 
 WORKDIR /workspace

@@ -56,6 +56,10 @@
     - Add VS Code Dev Container configuration (Podman backend).
     - Document both workflows in `README.md`.
 
+13. **Container build fixes** (Done)
+    - Install QMK into a venv in the container to avoid PEP 668 issues.
+    - Ensure required Python modules are preinstalled for non-interactive builds.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
