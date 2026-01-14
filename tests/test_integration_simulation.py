@@ -140,6 +140,27 @@ class IntegrationSimulationTests(unittest.TestCase):
             self.assertEqual(action, "unregister")
             self.assertEqual(key, self.mapping["KC_J"])
 
+    def test_common_shortcut_vectors_win(self) -> None:
+        vectors = {
+            "KC_J": "KC_C",
+            "KC_K": "KC_V",
+            "KC_Q": "KC_X",
+            "KC_SCLN": "KC_Z",
+            "KC_U": "KC_F",
+        }
+        mods = {"MOD_MASK_CTRL"}
+        for dvorak_key, qwerty_key in vectors.items():
+            action, key = self.fw.process(dvorak_key, True, "WIN_BASE", mods)
+            self.assertEqual(action, "register")
+            self.assertEqual(key, qwerty_key)
+            self.fw.process(dvorak_key, False, "WIN_BASE", set())
+
+    def test_unmapped_key_passes_through_even_with_mods(self) -> None:
+        mods = {"MOD_MASK_CTRL"}
+        action, key = self.fw.process("KC_A", True, "WIN_BASE", mods)
+        self.assertEqual(action, "pass")
+        self.assertIsNone(key)
+
     def test_fn_layers_do_not_remap(self) -> None:
         mods = {"MOD_MASK_CTRL"}
         action, key = self.fw.process("KC_J", True, "WIN_FN", mods)

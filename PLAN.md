@@ -39,6 +39,10 @@
 8. **Temporarily disable CI workflows** (Done)
    - Keep GitHub Actions disabled until final enablement pass.
 
+9. **Shortcut vector integration checks** (Done)
+   - Add common Windows shortcut vectors to simulation tests.
+   - Ensure unmapped keys still pass through with modifiers.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
