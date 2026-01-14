@@ -12,6 +12,7 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 - After tests pass, commit and push to `origin`.
 - Prefer Podman-based workflows for containerized builds; avoid Docker usage in docs or scripts.
 - When documenting or validating Keychron Launcher steps, specify Chrome/Edge/Opera (latest) as the supported browsers.
+- Treat Keychron Launcher as the official **stock firmware** path; use QMK Toolbox/CLI for custom `.bin` flashing.
 
 ## Project requirements (do not regress)
 - Target keyboard: Keychron V6 Max (ANSI knob assumed unless user says ISO/JIS).

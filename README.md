@@ -74,13 +74,22 @@ sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programme
    ```
 
 ## Flashing
-### Preferred: Keychron Launcher (official)
-- Use Keychron Launcher to flash the compiled `.bin` or official firmware.
+### Keychron Launcher (official firmware path)
+- Use Keychron Launcher to flash **official firmware**.
 - Launcher requires a wired USB connection.
- - Use the latest Chrome, Edge, or Opera for the Launcher web app.
- - If the Launcher UI does not allow selecting a local `.bin`, use QMK Toolbox or the CLI flash path below.
+- Use the latest Chrome, Edge, or Opera for the Launcher web app.
+- The official flow does not describe selecting a local `.bin` file.
 
-### CLI (QMK CLI or make)
+### Custom firmware (this repo) via QMK Toolbox (Windows/macOS)
+1. Build and copy artifacts:
+   ```bash
+   QMK_DIR=~/qmk_keychron ./scripts/build_artifacts.sh
+   ```
+2. Open QMK Toolbox and load `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`.
+3. Put the keyboard in bootloader mode (hold **Esc** while plugging in USB).
+4. Click **Flash**.
+
+### Custom firmware (this repo) via CLI (QMK CLI or make)
 ```bash
 QMK_DIR=~/qmk_firmware ./scripts/flash.sh
 ```
@@ -180,6 +189,7 @@ From inside the container you can run:
 ## Keychron Launcher (web app) notes
 - Launcher is the official web-based firmware path and expects a wired connection.
 - Use Chrome, Edge, or Opera (latest) for best compatibility.
+- Use QMK Toolbox or the CLI for custom `.bin` firmware.
 
 ## Customizing
 - **Change shortcut modifier behavior:** edit `SHORTCUT_MOD_MASK_WIN` / `SHORTCUT_MOD_MASK_MAC` in

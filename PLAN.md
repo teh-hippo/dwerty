@@ -75,6 +75,9 @@
 18. **Launcher support documentation** (Done)
     - Document supported browsers and Launcher constraints for firmware flashing.
 
+19. **Custom firmware flashing path** (Done)
+    - Clarify that Launcher is for official firmware; document QMK Toolbox/CLI for custom `.bin`.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.
