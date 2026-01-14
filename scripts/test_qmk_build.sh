@@ -19,6 +19,8 @@ if [[ -z "${QMK_DIR}" ]]; then
   QMK_DIR="${TEMP_QMK}"
 fi
 
+(cd "${QMK_DIR}" && git submodule update --init --recursive)
+
 if [[ ! -f "${QMK_DIR}/keyboards/keychron/v6_max/info.json" ]]; then
   echo "V6 Max support not found in QMK_DIR: ${QMK_DIR}" >&2
   exit 1

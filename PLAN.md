@@ -47,6 +47,10 @@
     - Add manual smoke test steps to `README.md`.
     - Add detailed UAT checklist in `docs/INTEGRATION_TESTING.md`.
 
+11. **Build gate readiness** (Done)
+    - Ensure submodules are initialized in `scripts/test_qmk_build.sh`.
+    - Record WSL dependency install steps in `README.md`.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.

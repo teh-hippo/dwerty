@@ -45,6 +45,13 @@ This keymap is **VIA-enabled** and **Launcher-compatible**:
 - QMK toolchain installed (QMK CLI or `make`).
 - QMK tree with `keychron/v6_max` support (Keychron fork by default).
 
+### WSL/Ubuntu dependency install (one-time)
+```bash
+python3 -m pip install --user qmk
+sudo apt-get update
+sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programmer dfu-util dos2unix libnewlib-arm-none-eabi
+```
+
 ## Setup
 1. Clone a QMK tree that supports V6 Max:
    ```bash
