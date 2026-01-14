@@ -10,6 +10,7 @@ This repo ships a firmware keymap for the Keychron V6 Max that implements Dvorak
 - Run available tests after each change when possible (`python -m unittest`).
 - Keep scripts idempotent and safe; avoid destructive commands.
 - After tests pass, commit and push to `origin`.
+- Prefer Podman-based workflows for containerized builds; avoid Docker usage in docs or scripts.
 
 ## Project requirements (do not regress)
 - Target keyboard: Keychron V6 Max (ANSI knob assumed unless user says ISO/JIS).

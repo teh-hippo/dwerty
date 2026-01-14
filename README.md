@@ -156,6 +156,29 @@ Optional QMK build check (network + toolchain required):
 ./scripts/test_qmk_build.sh
 ```
 
+## Podman workflows (preferred container path)
+### Build the container image
+```bash
+./scripts/podman_build.sh
+```
+
+### Run a container shell
+```bash
+./scripts/podman_run.sh
+```
+
+From inside the container you can run:
+```bash
+./scripts/test_qmk_build.sh
+./scripts/test.sh
+```
+
+## VS Code Dev Container (Podman backend)
+1. Install Podman and ensure it is configured for rootless use.
+2. In VS Code, install the **Dev Containers** extension.
+3. Open this repo and run: **Dev Containers: Reopen in Container**.
+4. The container uses the same `Containerfile` as the Podman scripts.
+
 ## Customizing
 - **Change shortcut modifier behavior:** edit `SHORTCUT_MOD_MASK_WIN` / `SHORTCUT_MOD_MASK_MAC` in
   `keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/keymap.c`.
