@@ -78,6 +78,11 @@
 19. **Custom firmware flashing path** (Done)
     - Clarify that Launcher is for official firmware; document QMK Toolbox/CLI for custom `.bin`.
 
+20. **VS Code Podman Dev Container configuration** (Done)
+    - Add `.vscode/settings.json` with `dev.containers.dockerPath` set to `podman`.
+    - Add Dev Containers extension to `.vscode/extensions.json` recommendations.
+    - Update `README.md` with Podman Dev Container setup instructions.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.

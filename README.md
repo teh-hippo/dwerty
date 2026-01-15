@@ -181,10 +181,19 @@ From inside the container you can run:
 ```
 
 ## VS Code Dev Container (Podman backend)
+This repo is pre-configured to use Podman for Dev Containers via [`.vscode/settings.json`](.vscode/settings.json):
+```json
+{
+  "dev.containers.dockerPath": "podman",
+  "dev.containers.dockerComposePath": "podman-compose"
+}
+```
+
+### Setup
 1. Install Podman and ensure it is configured for rootless use.
-2. In VS Code, install the **Dev Containers** extension.
+2. In VS Code, install the **Dev Containers** extension (recommended in [`.vscode/extensions.json`](.vscode/extensions.json)).
 3. Open this repo and run: **Dev Containers: Reopen in Container**.
-4. The container uses the same `Containerfile` as the Podman scripts.
+4. The container uses the same [`Containerfile`](Containerfile) as the Podman scripts.
 
 ## Keychron Launcher (web app) notes
 - Launcher is the official web-based firmware path and expects a wired connection.
