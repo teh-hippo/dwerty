@@ -1,4 +1,12 @@
 {
   "dev.containers.dockerPath": "podman",
-  "dev.containers.dockerComposePath": "podman-compose"
+  "dev.containers.dockerComposePath": "podman-compose",
+  "python.testing.unittestEnabled": true,
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestArgs": [
+    "-s",
+    "tests",
+    "-v"
+  ],
+  "testing.automaticallyOpenTestResults": true
 }

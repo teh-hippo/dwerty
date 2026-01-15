@@ -83,6 +83,11 @@
     - Add Dev Containers extension to `.vscode/extensions.json` recommendations.
     - Update `README.md` with Podman Dev Container setup instructions.
 
+21. **VS Code experience improvements** (Done)
+    - Refine extension recommendations for WSL and markdown/YAML.
+    - Improve test discovery in VS Code settings.
+    - Add tasks for integration and full test runs.
+
 ## Review notes
 - Windows behavior is the priority; macOS support should be minimal and Command-based.
 - Firmware assumes OS layout stays US Qwerty; OS-level Dvorak would double-map.

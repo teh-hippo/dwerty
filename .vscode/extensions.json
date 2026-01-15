@@ -1,9 +1,10 @@
 {
   "recommendations": [
     "ms-vscode-remote.remote-containers",
+    "ms-vscode-remote.remote-wsl",
     "ms-python.python",
-    "llvm-vs-code-extensions.vscode-clangd",
-    "redhat.vscode-yaml"
-  ],
-  "unwantedRecommendations": []
+    "ms-vscode.cpptools",
+    "redhat.vscode-yaml",
+    "davidanson.vscode-markdownlint"
+  ]
 }
