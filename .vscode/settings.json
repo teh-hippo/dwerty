@@ -8,5 +8,30 @@
     "tests",
     "-v"
   ],
-  "testing.automaticallyOpenTestResults": true
+  "testing.automaticallyOpenTestResults": true,
+  
+  // Python linting with Ruff
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "ruff.enable": true,
+  "ruff.lint.enable": true,
+  "ruff.format.args": ["--line-length", "100"],
+  
+  // C/C++ formatting
+  "C_Cpp.clang_format_style": "file",
+  "C_Cpp.clang_format_fallbackStyle": "LLVM",
+  "[c]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  
+  // Shell script validation
+  "shellcheck.enable": true,
+  "shellcheck.run": "onSave",
+  "shellcheck.exclude": ["SC2034", "SC1090", "SC1091"]
 }

@@ -1,121 +1,209 @@
 {
   "version": "2.0.0",
   "tasks": [
+    // Build tasks
     {
-      "label": "Run Tests",
-      "type": "shell",
-      "command": "python",
-      "args": ["-m", "unittest", "discover", "-s", "tests", "-v"],
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "Setup QMK",
-      "type": "shell",
-      "command": "./scripts/setup_qmk.sh",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "Install Keymap",
-      "type": "shell",
-      "command": "./scripts/install_keymap.sh",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "Build Firmware",
+      "label": "Build",
       "type": "shell",
       "command": "./scripts/build.sh",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": [],
+      "problemMatcher": {
+        "owner": "gcc",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
       "presentation": {
         "reveal": "always",
-        "panel": "new"
+        "panel": "shared"
       }
     },
     {
-      "label": "Build Firmware (Podman)",
+      "label": "Build (Podman)",
       "type": "shell",
-      "command": "./scripts/podman_build.sh",
+      "command": "./scripts/build.sh",
+      "args": ["--podman"],
+      "group": "build",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new"
+        "panel": "shared"
       }
     },
     {
-      "label": "Flash Firmware",
+      "label": "Build (Artifacts)",
+      "type": "shell",
+      "command": "./scripts/build.sh",
+      "args": ["--artifacts"],
+      "group": "build",
+      "problemMatcher": {
+        "owner": "gcc",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    // Test tasks
+    {
+      "label": "Test All",
+      "type": "shell",
+      "command": "./scripts/test.sh",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": {
+        "owner": "python",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^\\s*File \"(.*)\", line (\\d+).*$",
+          "file": 1,
+          "line": 2
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Test Unit",
+      "type": "shell",
+      "command": "./scripts/test.sh",
+      "args": ["--unit"],
+      "group": "test",
+      "problemMatcher": {
+        "owner": "python",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^\\s*File \"(.*)\", line (\\d+).*$",
+          "file": 1,
+          "line": 2
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Test Integration",
+      "type": "shell",
+      "command": "./scripts/test.sh",
+      "args": ["--integration"],
+      "group": "test",
+      "problemMatcher": {
+        "owner": "python",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^\\s*File \"(.*)\", line (\\d+).*$",
+          "file": 1,
+          "line": 2
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Test Build",
+      "type": "shell",
+      "command": "./scripts/test.sh",
+      "args": ["--build"],
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    // Lint tasks
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "./scripts/lint.sh",
+      "group": "none",
+      "problemMatcher": [
+        {
+          "owner": "ruff",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.*):(\\d+):(\\d+):\\s+(\\w+):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "severity": 4,
+            "message": 5
+          }
+        },
+        {
+          "owner": "shellcheck",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^In\\s+(.*)\\s+line\\s+(\\d+):.*$",
+            "file": 1,
+            "line": 2
+          }
+        }
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    // Flash tasks
+    {
+      "label": "Flash",
       "type": "shell",
       "command": "./scripts/flash.sh",
+      "group": "none",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new"
+        "panel": "shared"
       }
     },
+    // Setup tasks
     {
-      "label": "Flash Firmware (Easy)",
+      "label": "Setup QMK",
       "type": "shell",
-      "command": "./scripts/flash_easy.sh",
+      "command": "./scripts/setup_qmk.sh",
+      "group": "none",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new"
+        "panel": "shared"
       }
     },
     {
       "label": "Update QMK",
       "type": "shell",
       "command": "./scripts/update_qmk.sh",
+      "group": "none",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "Integration Tests",
-      "type": "shell",
-      "command": "./scripts/test_integration.sh",
-      "group": {
-        "kind": "test",
-        "isDefault": false
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "All Tests",
-      "type": "shell",
-      "command": "./scripts/test.sh",
-      "group": {
-        "kind": "test",
-        "isDefault": false
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
+        "panel": "shared"
       }
     }
   ]

@@ -5,6 +5,8 @@
     "ms-python.python",
     "ms-vscode.cpptools",
     "redhat.vscode-yaml",
-    "davidanson.vscode-markdownlint"
+    "davidanson.vscode-markdownlint",
+    "charliermarsh.ruff",
+    "timonwong.shellcheck"
   ]
 }
