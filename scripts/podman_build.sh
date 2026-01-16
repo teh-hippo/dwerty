@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+# Backward compatibility wrapper for build.sh --podman
+# This script is deprecated. Use: ./scripts/build.sh --podman
+
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-dwerty-qmk}"
-CONTAINERFILE="${CONTAINERFILE:-Containerfile}"
-
-podman build -t "${IMAGE_NAME}" -f "${CONTAINERFILE}" .
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${SCRIPT_DIR}/build.sh" --podman

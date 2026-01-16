@@ -17,7 +17,7 @@ if [[ -z "${BRANCH}" ]]; then
   else
     default_ref=$(git -C "${QMK_DIR}" symbolic-ref --quiet --short "refs/remotes/${REMOTE}/HEAD" || true)
     if [[ -n "${default_ref}" ]]; then
-      BRANCH="${default_ref#${REMOTE}/}"
+      BRANCH="${default_ref#"${REMOTE}"/}"
     else
       echo "Cannot determine branch; set QMK_BRANCH explicitly." >&2
       exit 1
