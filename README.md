@@ -1,18 +1,37 @@
 # Dvorak + Qwerty Shortcuts for Keychron V6 Max (Windows-first)
 
+_Last updated: January 2025_
+
 Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty. Windows behavior is the priority; macOS support is included where it is easy.
 
-## Project requirements
-- **Target**: Keychron V6 Max (ANSI knob unless otherwise specified).
-- **Behavior**: firmware-level Dvorak with Qwerty-position shortcuts (“Dvorak‑QWERTY Command”), OS remains US Qwerty.
-- **Platforms**: Windows first; macOS supported when low effort.
-- **Hardware parity**: preserve all keys, encoder, media, and lighting effects.
-- **UI editing**: post‑flash UI editing via VIA/Keychron Launcher (or UI‑only flow).
-- **Testing**: unit tests and integration tests (no hardware required when possible).
-- **Updates**: able to update to latest framework versions when required.
-- **Safety**: documented rollback path.
-- **Ops**: WSL-first dev/testing and flashing instructions; CI workflows for tests.
-- **Approach**: maintain an audit of frameworks/tooling vs manufacturer guidance in this README.
+## Quick Start
+
+1. **Setup QMK**: `./scripts/setup_qmk.sh`
+2. **Build firmware**: `QMK_DIR=~/qmk_firmware ./scripts/build.sh --artifacts`
+3. **Flash to keyboard**: `QMK_DIR=~/qmk_firmware ./scripts/flash.sh --easy`
+4. **Run tests**: `./scripts/test.sh`
+5. **Run linting**: `./scripts/lint.sh`
+
+See detailed instructions below for WSL workflows, Podman builds, and VS Code integration.
+
+## Requirements Checklist
+
+This project addresses all original requirements:
+
+| Requirement | Implementation |
+|-------------|----------------|
+| **Custom keyboard layout** | Firmware-level Dvorak with Qwerty-position shortcuts for Keychron V6 Max (ANSI knob) |
+| **"Dvorak-QWERTY Command"** | Windows: Ctrl/Alt/GUI trigger Qwerty positions; macOS: Command triggers Qwerty positions |
+| **Windows primary platform** | Windows-first shortcut behavior; macOS support included when low effort |
+| **Hardware features retained** | All keys, lighting, media, and encoder (knob) behavior preserved from stock keymap |
+| **UI editing support** | VIA-enabled for post-flash editing; Keychron Launcher compatible |
+| **Thorough testing** | Unit tests ([`tests/test_shortcuts_mapping.py`](tests/test_shortcuts_mapping.py)), integration tests ([`tests/test_integration_simulation.py`](tests/test_integration_simulation.py)), UAT guidance ([`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)) |
+| **WSL-first instructions** | WSL workflow documented for build/flash (see [WSL-first workflow](#wsl-first-workflow-recommended-for-windows-users) section) |
+| **Easy updates** | [`./scripts/update_qmk.sh`](scripts/update_qmk.sh) to update QMK firmware base |
+| **Linting and code standards** | Python (ruff), Shell (shellcheck), C (clang-format) via [`./scripts/lint.sh`](scripts/lint.sh) |
+| **VS Code integration** | Tasks, debugging, IntelliSense configured (see [VS Code Integration](#vs-code-integration) section) |
+| **Streamlined building** | Podman-based containerized builds via [`./scripts/build.sh --podman`](scripts/build.sh) |
+| **Rollback instructions** | Documented in [Backup / rollback](#backup--rollback) section |
 
 ## Behavior (Windows-first)
 - **Windows base layers**: when **Ctrl/Alt/GUI** is held, send Qwerty-position keycodes for shortcuts.
@@ -70,7 +89,7 @@ sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programme
 
 4. Optional: copy build artifacts into `./build/`:
    ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/build_artifacts.sh
+   QMK_DIR=~/qmk_firmware ./scripts/build.sh --artifacts
    ```
 
 ## Flashing
@@ -83,17 +102,23 @@ sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programme
 ### Custom firmware (this repo) via QMK Toolbox (Windows/macOS)
 1. Build and copy artifacts:
    ```bash
-   QMK_DIR=~/qmk_keychron ./scripts/build_artifacts.sh
+   QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
    ```
 2. Open QMK Toolbox and load `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`.
 3. Put the keyboard in bootloader mode (hold **Esc** while plugging in USB).
 4. Click **Flash**.
 
 ### Custom firmware (this repo) via CLI (QMK CLI or make)
+#### Standard flash
 ```bash
 QMK_DIR=~/qmk_firmware ./scripts/flash.sh
 ```
 This prompts you to enter bootloader mode (hold **Esc** while plugging in with cable).
+
+#### Easy flash (install keymap + build + flash in one step)
+```bash
+QMK_DIR=~/qmk_firmware ./scripts/flash.sh --easy
+```
 
 ## Backup / rollback
 - Download the official V6 Max firmware from Keychron's firmware page.
@@ -143,10 +168,108 @@ Notes:
 ### WSL + usbipd UAT workflow (manual smoke test)
 See `docs/INTEGRATION_TESTING.md` for the full checklist.
 
+## Linting
+The project includes linting configuration for code quality:
+
+### Run all linters
+```bash
+./scripts/lint.sh
+```
+
+### Run specific linters
+```bash
+./scripts/lint.sh --python   # Python files (ruff)
+./scripts/lint.sh --shell    # Shell scripts (shellcheck)
+./scripts/lint.sh --c        # C code formatting (clang-format)
+```
+
+### Linting tools
+- **Python**: `ruff` (configured in [`pyproject.toml`](pyproject.toml))
+- **Shell scripts**: `shellcheck` (configured in [`.shellcheckrc`](.shellcheckrc))
+- **C code**: `clang-format` (configured in [`.clang-format`](.clang-format), aligned with QMK style)
+
+### Install linting tools
+```bash
+pip install ruff
+sudo apt-get install shellcheck clang-format
+```
+
+Linting runs automatically in CI before tests.
+
+## VS Code Integration
+This project is fully configured for VS Code with tasks, debuggers, and IntelliSense support for C, Python, and shell development.
+
+### Recommended Extensions
+Install recommended extensions via [`.vscode/extensions.json`](.vscode/extensions.json):
+- **C/C++** (ms-vscode.cpptools) - QMK C code IntelliSense and formatting
+- **Python** (ms-python.python) - Python debugging and testing
+- **Ruff** (charliermarsh.ruff) - Python linting and formatting
+- **ShellCheck** (timonwong.shellcheck) - Shell script analysis
+- **Remote - WSL** (ms-vscode-remote.remote-wsl) - WSL integration
+- **Remote - Containers** (ms-vscode-remote.remote-containers) - Dev Container support
+
+VS Code will prompt you to install these when you open the project.
+
+### Available Tasks
+Access tasks via **Ctrl+Shift+P** → **Tasks: Run Task** (or **Ctrl+Shift+B** for the default build task):
+
+**Build tasks:**
+- **Build** - Standard QMK build (default build task)
+- **Build (Podman)** - Build using Podman container
+- **Build (Artifacts)** - Build and copy artifacts to `./build/`
+
+**Test tasks:**
+- **Test All** - Run all tests (default test task)
+- **Test Unit** - Run unit tests only
+- **Test Integration** - Run integration tests only
+- **Test Build** - Run QMK build verification test
+
+**Lint tasks:**
+- **Lint** - Run all linters (Python, shell, C)
+
+**Flash tasks:**
+- **Flash** - Flash firmware to keyboard
+
+**Setup tasks:**
+- **Setup QMK** - Clone and set up QMK firmware
+- **Update QMK** - Update QMK firmware to latest version
+
+All tasks are configured in [`.vscode/tasks.json`](.vscode/tasks.json) with appropriate problem matchers for error detection.
+
+### Debugging
+Launch configurations are available for Python test debugging via [`.vscode/launch.json`](.vscode/launch.json):
+
+- **Python: Debug Tests** - Debug all tests
+- **Python: Debug Current Test File** - Debug the currently open test file
+- **Python: Debug Unit Tests** - Debug unit tests only
+- **Python: Debug Integration Tests** - Debug integration tests only
+
+Press **F5** or use **Run → Start Debugging** to launch.
+
+### C/C++ IntelliSense
+QMK development IntelliSense is configured in [`.vscode/c_cpp_properties.json`](.vscode/c_cpp_properties.json):
+- Include paths point to `~/qmk_firmware` (default QMK location)
+- Configured for Linux/WSL GCC toolchain
+- Defines `LAYOUT_ansi_109` and `VIA_ENABLE` for proper code completion
+
+**Note:** IntelliSense paths assume QMK is installed at `~/qmk_firmware`. Run [`./scripts/setup_qmk.sh`](scripts/setup_qmk.sh) first if you haven't set up QMK yet.
+
+### Settings
+Linting and formatting are automatically applied via [`.vscode/settings.json`](.vscode/settings.json):
+- Python files use Ruff for formatting and linting (format on save enabled)
+- C files use `clang-format` with QMK style (uses [`.clang-format`](.clang-format))
+- Shell scripts use ShellCheck for validation
+- Python tests auto-discover in `tests/` directory
+
 ## Tests
 All tests (unit + integration simulation):
 ```bash
 ./scripts/test.sh
+```
+
+Run tests with linting:
+```bash
+./scripts/test.sh --lint
 ```
 
 Integration tests (no hardware required):
