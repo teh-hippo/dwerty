@@ -1,0 +1,13 @@
+# ShellCheck configuration for shell scripts
+# https://github.com/koalaman/shellcheck/wiki/Directive
+
+# Disable specific checks that are not relevant for this project
+
+# SC2034: Variable appears unused (false positives for trap cleanup handlers)
+disable=SC2034
+
+# SC1090: Can't follow non-constant source (acceptable for dynamic sourcing)
+disable=SC1090
+
+# SC1091: Not following sourced files (acceptable for external files)
+disable=SC1091

@@ -35,17 +35,42 @@ typedef struct {
 } qwerty_shortcut_map_t;
 
 static const qwerty_shortcut_map_t qwerty_shortcut_map[] = {
-    {KC_QUOT, KC_Q},    {KC_COMM, KC_W}, {KC_DOT, KC_E},  {KC_P, KC_R},    {KC_Y, KC_T},
-    {KC_F, KC_Y},       {KC_G, KC_U},    {KC_C, KC_I},    {KC_R, KC_O},    {KC_L, KC_P},
-    {KC_SLSH, KC_LBRC}, {KC_EQL, KC_RBRC},
+    {KC_QUOT, KC_Q},
+    {KC_COMM, KC_W},
+    {KC_DOT, KC_E},
+    {KC_P, KC_R},
+    {KC_Y, KC_T},
+    {KC_F, KC_Y},
+    {KC_G, KC_U},
+    {KC_C, KC_I},
+    {KC_R, KC_O},
+    {KC_L, KC_P},
+    {KC_SLSH, KC_LBRC},
+    {KC_EQL, KC_RBRC},
 
-    {KC_O, KC_S},       {KC_E, KC_D},    {KC_U, KC_F},    {KC_I, KC_G},    {KC_D, KC_H},
-    {KC_H, KC_J},       {KC_T, KC_K},    {KC_N, KC_L},    {KC_S, KC_SCLN}, {KC_MINS, KC_QUOT},
+    {KC_O, KC_S},
+    {KC_E, KC_D},
+    {KC_U, KC_F},
+    {KC_I, KC_G},
+    {KC_D, KC_H},
+    {KC_H, KC_J},
+    {KC_T, KC_K},
+    {KC_N, KC_L},
+    {KC_S, KC_SCLN},
+    {KC_MINS, KC_QUOT},
 
-    {KC_SCLN, KC_Z},    {KC_Q, KC_X},    {KC_J, KC_C},    {KC_K, KC_V},    {KC_X, KC_B},
-    {KC_B, KC_N},       {KC_W, KC_COMM}, {KC_V, KC_DOT},  {KC_Z, KC_SLSH},
+    {KC_SCLN, KC_Z},
+    {KC_Q, KC_X},
+    {KC_J, KC_C},
+    {KC_K, KC_V},
+    {KC_X, KC_B},
+    {KC_B, KC_N},
+    {KC_W, KC_COMM},
+    {KC_V, KC_DOT},
+    {KC_Z, KC_SLSH},
 
-    {KC_LBRC, KC_MINS}, {KC_RBRC, KC_EQL},
+    {KC_LBRC, KC_MINS},
+    {KC_RBRC, KC_EQL},
 };
 
 static uint16_t qwerty_shortcut_active[MATRIX_ROWS][MATRIX_COLS];
