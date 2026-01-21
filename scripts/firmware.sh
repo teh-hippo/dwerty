@@ -65,6 +65,31 @@ usbipd_path() {
   return 1
 }
 
+usbipd_bootloader_entry() {
+  local usbipd_bin="$1"
+
+  "${usbipd_bin}" list 2>/dev/null | awk '
+    function state_from_line(line) {
+      if (line ~ /Not shared/) return "Not shared";
+      if (line ~ /Attached/) return "Attached";
+      if (line ~ /Shared/) return "Shared";
+      return "";
+    }
+    /STM32[[:space:]]+BOOTLOADER/ {
+      bus=$1;
+      state=state_from_line($0);
+      if (state != "") { print bus "|" state; exit }
+      found=1;
+      next;
+    }
+    found {
+      state=state_from_line($0);
+      if (state != "") { print bus "|" state; exit }
+      if ($1 ~ /^[0-9]+-[0-9]+$/) { print bus "|Unknown"; exit }
+    }
+  '
+}
+
 ensure_usbipd_attached() {
   if ! is_wsl; then
     return 0
@@ -78,7 +103,7 @@ ensure_usbipd_attached() {
 
   while true; do
     local entry busid state
-    entry=$("${usbipd_bin}" list 2>/dev/null | awk '/STM32[[:space:]]+BOOTLOADER/ {bus=$1; getline; state=$1; print bus "|" state; exit}')
+    entry=$(usbipd_bootloader_entry "${usbipd_bin}")
     if [[ -z "${entry}" ]]; then
       echo "Waiting for STM32 BOOTLOADER (hold Esc while plugging in USB)..." >&2
       sleep 2
@@ -92,14 +117,23 @@ ensure_usbipd_attached() {
       echo "usbipd: STM32 BOOTLOADER attached at ${busid}." >&2
       return 0
     fi
-
-    echo "usbipd: STM32 BOOTLOADER detected (${state}); attaching..." >&2
-    if "${usbipd_bin}" attach --wsl --busid "${busid}"; then
-      sleep 1
-    else
-      echo "usbipd: attach failed; waiting for device to be shared/attached..." >&2
-      sleep 2
+    if [[ "${state}" == "Shared" ]]; then
+      echo "usbipd: STM32 BOOTLOADER shared at ${busid}; attaching..." >&2
+      if "${usbipd_bin}" attach --wsl --busid "${busid}"; then
+        sleep 1
+      else
+        echo "usbipd: attach failed; waiting for device to be attached..." >&2
+        sleep 2
+      fi
+      continue
     fi
+
+    if [[ "${state}" == "Not shared" ]]; then
+      echo "usbipd: STM32 BOOTLOADER not shared. Run 'usbipd bind --busid ${busid}' in Windows Admin PowerShell." >&2
+    else
+      echo "usbipd: STM32 BOOTLOADER detected (state: ${state}); waiting..." >&2
+    fi
+    sleep 2
   done
 }
 
