@@ -274,7 +274,7 @@ Run tests with linting:
 
 Integration tests (no hardware required):
 ```bash
-./scripts/test_integration.sh
+./scripts/test.sh --integration
 ```
 These tests simulate modifier + layer behavior in a dummy firmware model. They do not emulate USB/Bluetooth timing, wireless stacks, or true hardware scans.
 
@@ -283,13 +283,13 @@ Integration test plan and expansion notes:
 
 Optional QMK build check (network + toolchain required):
 ```bash
-./scripts/test_qmk_build.sh
+./scripts/test.sh --build
 ```
 
 ## Podman workflows (preferred container path)
 ### Build the container image
 ```bash
-./scripts/podman_build.sh
+./scripts/build.sh --podman
 ```
 
 ### Run a container shell
@@ -299,7 +299,7 @@ Optional QMK build check (network + toolchain required):
 
 From inside the container you can run:
 ```bash
-./scripts/test_qmk_build.sh
+./scripts/test.sh --build
 ./scripts/test.sh
 ```
 

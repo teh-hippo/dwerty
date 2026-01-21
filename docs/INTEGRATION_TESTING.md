@@ -9,11 +9,11 @@
 1. **Simulation tests** (no hardware, no QMK toolchain)
    - Location: `tests/test_integration_simulation.py`
    - Focus: modifier triggers, base-layer-only enforcement, and release behavior.
-   - Run: `./scripts/test_integration.sh`
+   - Run: `./scripts/test.sh --integration`
    - Includes common Windows shortcut vectors and ensures unmapped keys pass through.
 
 2. **Optional build gate** (requires QMK toolchain + network)
-   - Script: `./scripts/test_qmk_build.sh`
+   - Script: `./scripts/test.sh --build`
    - Purpose: ensure keymap compiles against the chosen QMK tree.
    - Not part of default test run until dependencies are installed.
 

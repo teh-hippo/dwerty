@@ -44,5 +44,8 @@
 __pycache__/
 *.pyc
 
+# Python tool caches
+.ruff_cache/
+
 # Local build artifacts
 build/

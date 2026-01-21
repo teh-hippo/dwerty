@@ -86,17 +86,12 @@ lint_shell() {
   
   local scripts=(
     scripts/build.sh
-    scripts/build_artifacts.sh
     scripts/flash.sh
-    scripts/flash_easy.sh
     scripts/install_keymap.sh
     scripts/lint.sh
-    scripts/podman_build.sh
     scripts/podman_run.sh
     scripts/setup_qmk.sh
     scripts/test.sh
-    scripts/test_integration.sh
-    scripts/test_qmk_build.sh
     scripts/update_qmk.sh
   )
   
