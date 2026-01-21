@@ -17,38 +17,27 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 2. **Attach to WSL** (Windows Admin PowerShell):
 
    ```powershell
-   usbipd list                           # Find BUSID for STM32 BOOTLOADER
+   usbipd list
    usbipd bind --busid <BUSID>
    usbipd attach --wsl --busid <BUSID>
    ```
 
-3. **Build + flash** (WSL):
+3. **Build + flash**:
 
    ```bash
    ./scripts/firmware.sh
    ```
 
-## Commands
-
-```bash
-./scripts/firmware.sh         # build + flash (default)
-./scripts/firmware.sh build   # build only
-./scripts/firmware.sh flash   # flash only
-./scripts/test.sh             # run tests
-```
-
 ## Keyboard Shortcuts
 
 **Layout Toggle**
 - **Fn + Z/X**: Cycle layers (shows layer number briefly)
-- **VIA: `LAYOUT_DVORAK`/`LAYOUT_QWERTY`**: Set default layer (saved to EEPROM)
+- **VIA: `LAYOUT_DVORAK`/`LAYOUT_QWERTY`**: Set default layer
 
-**Lighting (Fn layer)**
-- **Tab**: Toggle RGB | **Q/A**: Cycle effects | **W/S**: Brightness | **E/D**: Hue | **R/F**: Saturation | **T/G**: Speed
-- **Encoder (Fn)**: Brightness up/down
-
-**Connectivity (Fn layer)**
-- **1/2/3**: Bluetooth host 1/2/3 | **4**: 2.4G wireless | **B**: Battery level | **N**: Toggle N-key rollover
+**Fn Layer**
+- Lighting controls: Tab (toggle), Q/A (effects), W/S (brightness), E/D (hue), R/F (saturation), T/G (speed)
+- Encoder: Brightness up/down
+- Connectivity: 1/2/3 (Bluetooth), 4 (2.4G), B (battery), N (N-key rollover)
 
 ## VIA Support
 
