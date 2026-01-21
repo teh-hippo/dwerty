@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# Opinionated firmware workflow for Keychron V6 Max Dvorak-QWERTY
+# Firmware workflow for Keychron V6 Max Dvorak-QWERTY
 #
-# Usage:
-#   ./scripts/firmware.sh podman [all|build|flash]
-#   ./scripts/firmware.sh local  [all|build|flash]
-#
-# Defaults:
-#   - Action defaults to "all" when omitted.
-#   - QMK cache lives in ./.cache/qmk_keychron (hard reset + clean each run).
+# Usage: ./scripts/firmware.sh [all|build|flash]
+# Defaults to "all" (build + flash)
 
 set -euo pipefail
 
-MODE="${1:-}"
-ACTION="${2:-all}"
+ACTION="${1:-all}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -30,7 +24,6 @@ QMK_BRANCH="wireless_playground"
 IMAGE_NAME="localhost/dwerty-qmk"
 CONTAINERFILE="${ROOT_DIR}/Containerfile"
 IMAGE_HASH_FILE="${CACHE_DIR}/podman-image.sha256"
-PODMAN_CMD=""
 PODMAN_BIN=(podman)
 PODMAN_USERNS=(--userns=keep-id)
 PODMAN_BUILD_NET=()
@@ -40,7 +33,7 @@ HOST_GID="$(id -g)"
 HOST_CHOWN=0
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \?//'
+  sed -n '2,6p' "$0" | sed 's/^# \?//'
   exit 0
 }
 
@@ -142,63 +135,6 @@ ensure_dirs() {
   mkdir -p "${BUILD_DIR}"
 }
 
-ensure_qmk_repo_local() {
-  if [[ ! -d "${QMK_DIR}/.git" ]]; then
-    rm -rf "${QMK_DIR}"
-    git clone "${QMK_REPO}" "${QMK_DIR}"
-  fi
-
-  git -C "${QMK_DIR}" remote set-url origin "${QMK_REPO}"
-  git -C "${QMK_DIR}" fetch origin --tags
-  git -C "${QMK_DIR}" checkout "${QMK_BRANCH}"
-  git -C "${QMK_DIR}" reset --hard "origin/${QMK_BRANCH}"
-  git -C "${QMK_DIR}" clean -fdx
-  git -C "${QMK_DIR}" submodule update --init --recursive
-
-  if [[ ! -f "${QMK_DIR}/keyboards/keychron/v6_max/info.json" ]]; then
-    fail "V6 Max support not found in ${QMK_REPO} (${QMK_BRANCH})."
-  fi
-}
-
-install_keymap_local() {
-  local src="${ROOT_DIR}/keymaps/keychron/v6_max/ansi_encoder/keymaps/${KEYMAP}"
-  local dest="${QMK_DIR}/keyboards/keychron/v6_max/ansi_encoder/keymaps/${KEYMAP}"
-
-  rm -rf "${dest}"
-  mkdir -p "$(dirname "${dest}")"
-  cp -a "${src}" "${dest}"
-}
-
-collect_artifacts_local() {
-  local bin_path="${QMK_DIR}/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin"
-  local hex_path="${QMK_DIR}/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.hex"
-
-  if [[ -f "${bin_path}" ]]; then
-    cp -f "${bin_path}" "${BUILD_DIR}/"
-  fi
-  if [[ -f "${hex_path}" ]]; then
-    cp -f "${hex_path}" "${BUILD_DIR}/"
-  fi
-}
-
-build_local() {
-  if command -v qmk >/dev/null 2>&1; then
-    (cd "${QMK_DIR}" && qmk compile -kb "${KEYBOARD}" -km "${KEYMAP}")
-  else
-    (cd "${QMK_DIR}" && make "${KEYBOARD}:${KEYMAP}")
-  fi
-
-  collect_artifacts_local
-}
-
-flash_local() {
-  if command -v qmk >/dev/null 2>&1; then
-    (cd "${QMK_DIR}" && qmk flash -kb "${KEYBOARD}" -km "${KEYMAP}")
-  else
-    (cd "${QMK_DIR}" && make "${KEYBOARD}:${KEYMAP}:flash")
-  fi
-}
-
 ensure_podman_image() {
   local current_hash
   current_hash=$(sha256sum "${CONTAINERFILE}" | awk '{print $1}')
@@ -218,7 +154,8 @@ ensure_podman_image() {
 }
 
 podman_run() {
-  local extra_args=("${@}")
+  local cmd="$1"
+  local extra_args=("${@:2}")
 
   "${PODMAN_BIN[@]}" run --rm -it \
     "${PODMAN_RUN_NET[@]}" \
@@ -236,7 +173,7 @@ podman_run() {
     -w /workspace \
     "${extra_args[@]}" \
     "${IMAGE_NAME}" \
-    /bin/bash -lc "${PODMAN_CMD}"
+    /bin/bash -lc "${cmd}"
 }
 
 configure_podman_for_action() {
@@ -259,10 +196,10 @@ configure_podman_for_action() {
   fi
 }
 
-ensure_qmk_repo_podman() {
+ensure_qmk_repo() {
   mkdir -p "${QMK_DIR}"
 
-  PODMAN_CMD='set -euo pipefail
+  local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
 if [[ ! -d /qmk/.git ]]; then
   rm -rf /qmk/*
@@ -281,11 +218,11 @@ if [[ ! -f /qmk/keyboards/keychron/v6_max/info.json ]]; then
   exit 1
 fi'
 
-  podman_run
+  podman_run "${cmd}"
 }
 
-build_podman() {
-  PODMAN_CMD='set -euo pipefail
+build_firmware() {
+  local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
 export SKIP_GIT=1
 src="/workspace/keymaps/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
@@ -315,11 +252,11 @@ if [[ "$HOST_CHOWN" == "1" ]]; then
   chown -R "$HOST_UID:$HOST_GID" /workspace/build || true
 fi'
 
-  podman_run
+  podman_run "${cmd}"
 }
 
-flash_podman() {
-  PODMAN_CMD='set -euo pipefail
+flash_firmware() {
+  local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
 export SKIP_GIT=1
 src="/workspace/keymaps/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
@@ -334,19 +271,15 @@ else
   (cd /qmk && make "$KEYBOARD:$KEYMAP:flash")
 fi'
 
-  podman_run --privileged --device /dev/bus/usb:/dev/bus/usb
+  podman_run "${cmd}" --privileged --device /dev/bus/usb:/dev/bus/usb
 }
 
-if [[ "${MODE}" == "--help" || "${MODE}" == "-h" ]]; then
+if [[ "${ACTION}" == "--help" || "${ACTION}" == "-h" ]]; then
   usage
 fi
 
-if [[ "${MODE}" != "podman" && "${MODE}" != "local" ]]; then
-  fail "First argument must be 'podman' or 'local'."
-fi
-
 if [[ "${ACTION}" != "all" && "${ACTION}" != "build" && "${ACTION}" != "flash" ]]; then
-  fail "Second argument must be 'all', 'build', or 'flash'."
+  fail "Argument must be 'all', 'build', or 'flash'."
 fi
 
 ensure_dirs
@@ -355,37 +288,19 @@ if [[ "${ACTION}" == "all" || "${ACTION}" == "flash" ]]; then
   ensure_usbipd_attached
 fi
 
-if [[ "${MODE}" == "podman" ]]; then
-  configure_podman_for_action
-  ensure_podman_image
-  ensure_qmk_repo_podman
+configure_podman_for_action
+ensure_podman_image
+ensure_qmk_repo
 
-  case "${ACTION}" in
-    all)
-      build_podman
-      flash_podman
-      ;;
-    build)
-      build_podman
-      ;;
-    flash)
-      flash_podman
-      ;;
-  esac
-else
-  ensure_qmk_repo_local
-  install_keymap_local
-
-  case "${ACTION}" in
-    all)
-      build_local
-      flash_local
-      ;;
-    build)
-      build_local
-      ;;
-    flash)
-      flash_local
-      ;;
-  esac
-fi
+case "${ACTION}" in
+  all)
+    build_firmware
+    flash_firmware
+    ;;
+  build)
+    build_firmware
+    ;;
+  flash)
+    flash_firmware
+    ;;
+esac

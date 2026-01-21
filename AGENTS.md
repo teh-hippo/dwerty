@@ -1,21 +1,23 @@
 # AGENTS.md
 
-_Last updated: January 2025_
+_Last updated: January 2026_
 
-See [`README.md`](README.md) for project behavior, layout rules, and tooling decisions.
+See [`README.md`](README.md) for project details.
 
-## Operating rules
-- Work in small, reviewable steps. Prefer tidy diffs and minimal churn.
-- Update [`README.md`](README.md) whenever behavior, setup, or flashing steps change.
-- Run available tests after each change when possible ([`./scripts/test.sh`](scripts/test.sh)).
-- Run linting before committing code ([`./scripts/lint.sh`](scripts/lint.sh)).
-- Keep scripts idempotent and safe; avoid destructive commands.
-- After tests pass, commit and push to `origin`.
-- Prefer Podman-based workflows for containerized builds; avoid Docker usage in docs or scripts.
-- When documenting or validating Keychron Launcher steps, specify Chrome/Edge/Opera (latest) as the supported browsers.
-- Treat Keychron Launcher as the official **stock firmware** path; use QMK Toolbox/CLI for custom `.bin` flashing.
-- Use VS Code tasks (defined in [`.vscode/tasks.json`](.vscode/tasks.json)) when available for build/test/lint operations.
+## Operating Rules
 
-## Continuous improvement
-- If assumptions are wrong (layout variant, OS expectations, shortcut behavior), update this file immediately with the corrected rule.
-- If any manual step is error-prone, add a scripted helper and document it.
+- Work in small, reviewable steps with tidy diffs
+- Update [`README.md`](README.md) when behavior/setup/flashing changes
+- Run tests after changes: [`./scripts/test.sh`](scripts/test.sh)
+- Run lint before commits: [`./scripts/lint.sh`](scripts/lint.sh)
+- Keep scripts idempotent and safe
+- After tests pass, commit and push to `origin`
+- Use Podman-based workflows for containerized builds
+- Specify Chrome/Edge/Opera (latest) as supported browsers for Keychron Launcher
+- Keychron Launcher = official stock firmware; QMK Toolbox/CLI = custom `.bin` flashing
+- Use VS Code tasks from [`.vscode/tasks.json`](.vscode/tasks.json) when available
+
+## Continuous Improvement
+
+- If assumptions are wrong, update this file immediately
+- If manual steps are error-prone, add scripted helpers and document them
