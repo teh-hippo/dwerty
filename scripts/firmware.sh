@@ -98,7 +98,7 @@ ensure_usbipd_attached() {
     local entry busid state
     entry=$(usbipd_bootloader_entry "${usbipd_bin}")
     if [[ -z "${entry}" ]]; then
-      echo "Waiting for STM32 BOOTLOADER (hold Esc while plugging in USB)..." >&2
+      echo "Keyboard not detected. Hold Esc while plugging in USB to enter bootloader mode." >&2
       sleep 2
       continue
     fi

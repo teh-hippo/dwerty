@@ -61,17 +61,7 @@ Use [usevia.app](https://usevia.app) in Chrome/Edge for visual key remapping:
 2. **Design** tab → **Load** [`via/v6_max_ansi_encoder.json`](via/v6_max_ansi_encoder.json)
 3. **Configure** tab → edit layers, assign `LAYOUT_DVORAK`/`LAYOUT_QWERTY`, remap keys, adjust lighting
 
-## Backup / Rollback
-
-Download official V6 Max firmware from [Keychron's firmware page](https://www.keychron.com/pages/keychron-v6-max-firmware-and-json-files) and flash with Keychron Launcher (Chrome/Edge/Opera) or QMK Toolbox.
-
 ## Customizing
 
 - **Shortcut modifiers**: Edit `SHORTCUT_MOD_MASK_WIN`/`SHORTCUT_MOD_MASK_MAC` in [keymap.c](keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/keymap.c)
 - **ISO/JIS layouts**: Mirror this keymap to `iso_encoder` or other variants
-
-## WSL USB Detach
-
-```powershell
-usbipd detach --busid <BUSID>
-```
