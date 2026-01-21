@@ -160,149 +160,25 @@ Download the official V6 Max firmware from Keychron's firmware page and flash it
 ./scripts/test.sh    # Run unit tests
 ./scripts/lint.sh    # Run all linters (Python, Shell, C)
 ```
-```
 
-Linting runs automatically in CI before tests.
+## Podman Build (Optional)
 
-## VS Code Integration
-This project is fully configured for VS Code with tasks, debuggers, and IntelliSense support for C, Python, and shell development.
+Build firmware in a container without installing QMK on host:
 
-### Recommended Extensions
-Install recommended extensions via [`.vscode/extensions.json`](.vscode/extensions.json):
-- **C/C++** (ms-vscode.cpptools) - QMK C code IntelliSense and formatting
-- **Python** (ms-python.python) - Python debugging and testing
-- **Ruff** (charliermarsh.ruff) - Python linting and formatting
-- **ShellCheck** (timonwong.shellcheck) - Shell script analysis
-- **Remote - WSL** (ms-vscode-remote.remote-wsl) - WSL integration
-- **Remote - Containers** (ms-vscode-remote.remote-containers) - Dev Container support
-
-VS Code will prompt you to install these when you open the project.
-
-### Available Tasks
-Access tasks via **Ctrl+Shift+P** → **Tasks: Run Task** (or **Ctrl+Shift+B** for the default build task):
-
-**Build tasks:**
-- **Build** - Standard QMK build (default build task)
-- **Build (Podman)** - Build using Podman container
-- **Build (Artifacts)** - Build and copy artifacts to `./build/`
-
-**Test tasks:**
-- **Test All** - Run all tests (default test task)
-- **Test Unit** - Run unit tests only
-- **Test Integration** - Run integration tests only
-- **Test Build** - Run QMK build verification test
-
-**Lint tasks:**
-- **Lint** - Run all linters (Python, shell, C)
-
-**Flash tasks:**
-- **Flash** - Flash firmware to keyboard
-
-**Setup tasks:**
-- **Setup QMK** - Clone and set up QMK firmware
-- **Update QMK** - Update QMK firmware to latest version
-
-All tasks are configured in [`.vscode/tasks.json`](.vscode/tasks.json) with appropriate problem matchers for error detection.
-
-### Debugging
-Launch configurations are available for Python test debugging via [`.vscode/launch.json`](.vscode/launch.json):
-
-- **Python: Debug Tests** - Debug all tests
-- **Python: Debug Current Test File** - Debug the currently open test file
-- **Python: Debug Unit Tests** - Debug unit tests only
-- **Python: Debug Integration Tests** - Debug integration tests only
-
-Press **F5** or use **Run → Start Debugging** to launch.
-
-### C/C++ IntelliSense
-QMK development IntelliSense is configured in [`.vscode/c_cpp_properties.json`](.vscode/c_cpp_properties.json):
-- Include paths point to `~/qmk_firmware` (default QMK location)
-- Configured for Linux/WSL GCC toolchain
-- Defines `LAYOUT_ansi_109` and `VIA_ENABLE` for proper code completion
-
-**Note:** IntelliSense paths assume QMK is installed at `~/qmk_firmware`. Run [`./scripts/setup_qmk.sh`](scripts/setup_qmk.sh) first if you haven't set up QMK yet.
-
-### Settings
-Linting and formatting are automatically applied via [`.vscode/settings.json`](.vscode/settings.json):
-- Python files use Ruff for formatting and linting (format on save enabled)
-- C files use `clang-format` with QMK style (uses [`.clang-format`](.clang-format))
-- Shell scripts use ShellCheck for validation
-- Python tests auto-discover in `tests/` directory
-
-## Tests
-All tests (unit + integration simulation):
-```bash
-./scripts/test.sh
-```
-
-Run tests with linting:
-```bash
-./scripts/test.sh --lint
-```
-
-Integration tests (no hardware required):
-```bash
-./scripts/test.sh --integration
-```
-These tests simulate modifier + layer behavior in a dummy firmware model. They do not emulate USB/Bluetooth timing, wireless stacks, or true hardware scans.
-
-Integration test plan and expansion notes:
-- See `docs/INTEGRATION_TESTING.md`.
-
-Optional QMK build check (network + toolchain required):
-```bash
-./scripts/test.sh --build
-```
-
-## Podman workflows (preferred container path)
-### Build the container image
 ```bash
 ./scripts/build.sh --podman
 ```
 
-### Run a container shell
-```bash
-./scripts/podman_run.sh
-```
-
-From inside the container you can run:
-```bash
-./scripts/test.sh --build
-./scripts/test.sh
-```
-
-## VS Code Dev Container (Podman backend)
-This repo is pre-configured to use Podman for Dev Containers via [`.vscode/settings.json`](.vscode/settings.json):
-```json
-{
-  "dev.containers.dockerPath": "podman",
-  "dev.containers.dockerComposePath": "podman-compose"
-}
-```
-
-### Setup
-1. Install Podman and ensure it is configured for rootless use.
-2. In VS Code, install the **Dev Containers** extension (recommended in [`.vscode/extensions.json`](.vscode/extensions.json)).
-3. Open this repo and run: **Dev Containers: Reopen in Container**.
-4. The container uses the same [`Containerfile`](Containerfile) as the Podman scripts.
-
-## Keychron Launcher (web app) notes
-- Launcher is the official web-based firmware path and expects a wired connection.
-- Use Chrome, Edge, or Opera (latest) for best compatibility.
-- Use QMK Toolbox or the CLI for custom `.bin` firmware.
-
 ## Customizing
+
 - **Change shortcut modifier behavior:** edit `SHORTCUT_MOD_MASK_WIN` / `SHORTCUT_MOD_MASK_MAC` in
   `keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/keymap.c`.
 - **ISO/JIS layouts:** this repo assumes ANSI knob (`ansi_encoder`). For ISO/JIS,
   mirror this keymap into the correct directory (`iso_encoder` or other variants).
 
 ## References
-- Keychron Launcher: https://www.keychron.com/blogs/news/now-you-can-use-keychron-launcher-to-customize-your-keyboard
-- Keychron firmware + JSON downloads: https://www.keychron.com/pages/keychron-v6-max-firmware-and-json-files
-- Keychron QMK/VIA firmware index: https://www.keychron.com/pages/firmware-and-json-files-of-the-keychron-qmk-keyboards
-- VIA QMK configuration guide: https://caniusevia.com/docs/configuring_qmk/
-- Apple Dvorak - QWERTY Command layout: https://support.apple.com/en-lk/guide/mac-help/mchlp1406/mac
-- QMK FAQ (TMK relationship): https://docs.qmk.fm/#/faq_general
-- QMK Toolbox: https://github.com/qmk/qmk_toolbox
-- usbipd-win: https://learn.microsoft.com/windows/wsl/connect-usb
+
+- [Keychron V6 Max Firmware](https://www.keychron.com/pages/keychron-v6-max-firmware-and-json-files)
+- [VIA](https://usevia.app) / [VIA QMK Guide](https://caniusevia.com/docs/configuring_qmk/)
+- [QMK Toolbox](https://github.com/qmk/qmk_toolbox)
+- [usbipd-win (WSL USB)](https://learn.microsoft.com/windows/wsl/connect-usb)
