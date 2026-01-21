@@ -285,14 +285,14 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
         if (timer_elapsed(layer_indicator_timer) > LAYER_INDICATOR_TIMEOUT_MS) {
             layer_indicator_active = false;
         } else {
-            rgb_matrix_set_color_all(0, 0, 0);
-            uint8_t display = layer_indicator_layer + 1;
-            if (display >= 1 && display <= QD_ARRAY_SIZE(number_row_cols)) {
-                uint8_t col = number_row_cols[display - 1];
-                uint8_t led = g_led_config.matrix_co[1][col];
-                if (led != NO_LED) {
-                    rgb_matrix_set_color(led, LAYER_INDICATOR_R, LAYER_INDICATOR_G, LAYER_INDICATOR_B);
-                }
+            for (uint8_t i = led_min; i < led_max; i++) {
+                rgb_matrix_set_color(i, 0, 0, 0);
+            }
+            uint8_t display = (get_highest_layer(default_layer_state) % QD_ARRAY_SIZE(number_row_cols)) + 1;
+            uint8_t col = number_row_cols[display - 1];
+            uint8_t led = g_led_config.matrix_co[1][col];
+            if (led != NO_LED && led >= led_min && led < led_max) {
+                rgb_matrix_set_color(led, LAYER_INDICATOR_R, LAYER_INDICATOR_G, LAYER_INDICATOR_B);
             }
             return false;
         }
