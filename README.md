@@ -138,32 +138,54 @@ Notes:
 ### Option A: build in WSL, flash in Windows
 1. Build in WSL:
    ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/build.sh
+   QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
    ```
-2. Copy the `.bin` to Windows and flash using Keychron Launcher or QMK Toolbox.
+2. Copy the `.bin` from `build/` to Windows and flash using Keychron Launcher or QMK Toolbox.
 
 ### Option B: USB passthrough with usbipd-win
-1. Install **usbipd-win** on Windows and ensure you are using WSL 2.
-2. List devices (Windows PowerShell):
+1. Install **usbipd-win** on Windows (Admin PowerShell):
+   ```powershell
+   winget install usbipd
+   ```
+   Restart your terminal after installation.
+
+2. Put keyboard in bootloader mode: **hold Esc while plugging in USB**.
+
+3. List devices to find the keyboard (Windows PowerShell):
    ```powershell
    usbipd list
    ```
-3. Attach the device to WSL (Admin PowerShell):
+   Look for `STM32 BOOTLOADER` or VID `0483` — note the **BUSID** (e.g., `1-4`).
+
+4. Bind and attach to WSL (Admin PowerShell):
    ```powershell
-   .\scripts\wsl_attach_usb.ps1 -BusId <BUSID>
+   usbipd bind --busid <BUSID>
+   usbipd attach --wsl --busid <BUSID>
    ```
-4. Confirm visibility in WSL:
+
+5. Confirm visibility in WSL:
    ```bash
    lsusb
    ```
-5. Flash from WSL:
+   You should see `STMicroelectronics STM Device in DFU Mode`.
+
+6. Flash from WSL (requires sudo for USB access):
    ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/flash.sh
+   sudo dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D ~/dwerty/build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin
    ```
-6. Detach when done:
+
+7. Detach when done (Windows PowerShell):
    ```powershell
    usbipd detach --busid <BUSID>
    ```
+
+#### Optional: avoid sudo for future flashes
+Add a udev rule to allow non-root access to STM32 DFU devices:
+```bash
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666"' | sudo tee /etc/udev/rules.d/50-stm32-dfu.rules
+sudo udevadm control --reload-rules
+```
+Then detach/reattach the keyboard via usbipd.
 
 ### WSL + usbipd UAT workflow (manual smoke test)
 See `docs/INTEGRATION_TESTING.md` for the full checklist.
