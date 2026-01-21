@@ -1,7 +1,3 @@
-# clang-format configuration for QMK firmware C code
-# Based on QMK's coding conventions
-# https://docs.qmk.fm/#/coding_conventions_c
-
 BasedOnStyle: LLVM
 IndentWidth: 4
 UseTab: Never

@@ -1,7 +1,5 @@
 # AGENTS.md
 
-_Last updated: January 2026_
-
 See [`README.md`](README.md) for project details.
 
 ## Operating Rules
@@ -16,8 +14,3 @@ See [`README.md`](README.md) for project details.
 - Specify Chrome/Edge/Opera (latest) as supported browsers for Keychron Launcher
 - Keychron Launcher = official stock firmware; QMK Toolbox/CLI = custom `.bin` flashing
 - Use VS Code tasks from [`.vscode/tasks.json`](.vscode/tasks.json) when available
-
-## Continuous Improvement
-
-- If assumptions are wrong, update this file immediately
-- If manual steps are error-prone, add scripted helpers and document them

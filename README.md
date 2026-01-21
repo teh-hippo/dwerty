@@ -1,7 +1,5 @@
 # Dvorak + Qwerty Shortcuts for Keychron V6 Max
 
-_Last updated: January 2026_
-
 Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty. Windows-first with macOS support.
 
 ## Features
@@ -60,8 +58,3 @@ Use [usevia.app](https://usevia.app) in Chrome/Edge for visual key remapping:
 1. **Settings** → enable **Show Design Tab**
 2. **Design** tab → **Load** [`via/v6_max_ansi_encoder.json`](via/v6_max_ansi_encoder.json)
 3. **Configure** tab → edit layers, assign `LAYOUT_DVORAK`/`LAYOUT_QWERTY`, remap keys, adjust lighting
-
-## Customizing
-
-- **Shortcut modifiers**: Edit `SHORTCUT_MOD_MASK_WIN`/`SHORTCUT_MOD_MASK_MAC` in [keymap.c](keymaps/keychron/v6_max/ansi_encoder/keymaps/dvorak_qwerty/keymap.c)
-- **ISO/JIS layouts**: Mirror this keymap to `iso_encoder` or other variants
