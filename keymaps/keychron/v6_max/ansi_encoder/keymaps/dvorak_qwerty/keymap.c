@@ -91,7 +91,7 @@ static bool qwerty_shortcuts_layer_active(uint8_t layer) {
 }
 
 static bool is_qwerty_mode(void) {
-    uint8_t layer = get_highest_layer(layer_state | default_layer_state);
+    uint8_t layer = get_highest_layer(default_layer_state);
     return layer == WIN_QWERTY;
 }
 
@@ -279,7 +279,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return false;
 }
 
-// RGB indicator: Tab key glows when QWERTY mode is active
+// RGB indicator: Tab key shows Dwerty/QWERTY layout color
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     if (layer_indicator_active) {
         if (timer_elapsed(layer_indicator_timer) > LAYER_INDICATOR_TIMEOUT_MS) {
@@ -290,19 +290,21 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
             if (display >= 1 && display <= QD_ARRAY_SIZE(number_row_cols)) {
                 uint8_t col = number_row_cols[display - 1];
                 uint8_t led = g_led_config.matrix_co[1][col];
-                    if (led != NO_LED) {
+                if (led != NO_LED) {
                     rgb_matrix_set_color(led, LAYER_INDICATOR_R, LAYER_INDICATOR_G, LAYER_INDICATOR_B);
                 }
             }
             return false;
         }
     }
-    if (is_qwerty_mode()) {
-        // Tab key LED index - highlight in cyan/blue when QWERTY active
-        // Tab is typically at row 2, col 0 in the matrix
-        uint8_t tab_led = g_led_config.matrix_co[2][0];
-        if (tab_led >= led_min && tab_led < led_max && tab_led != NO_LED) {
-            rgb_matrix_set_color(tab_led, 0, 180, 255); // Cyan color
+    // Tab key LED index indicates active layout
+    // Tab is typically at row 2, col 0 in the matrix
+    uint8_t tab_led = g_led_config.matrix_co[2][0];
+    if (tab_led >= led_min && tab_led < led_max && tab_led != NO_LED) {
+        if (is_qwerty_mode()) {
+            rgb_matrix_set_color(tab_led, 255, 255, 0); // Yellow for QWERTY
+        } else {
+            rgb_matrix_set_color(tab_led, 255, 0, 0); // Red for Dwerty
         }
     }
     return false;
