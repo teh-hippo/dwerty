@@ -1,219 +1,165 @@
 # Dvorak + Qwerty Shortcuts for Keychron V6 Max (Windows-first)
 
-_Last updated: January 2025_
+_Last updated: January 2026_
 
 Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty. Windows behavior is the priority; macOS support is included where it is easy.
 
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Dwerty typing** | Dvorak layout with QWERTY-position shortcuts (Ctrl+C/V/Z work as expected) |
+| **QWERTY toggle** | **Fn + Caps Lock** switches to standard QWERTY layout (persists across power cycles) |
+| **Visual indicator** | Tab key glows **cyan** when QWERTY mode is active |
+| **6 layers** | MAC_BASE, MAC_FN, WIN_BASE, WIN_FN, WIN_QWERTY, WIN_QWERTY_FN |
+| **VIA support** | Full VIA compatibility for visual key remapping and lighting control |
+| **RGB lighting** | All stock lighting effects preserved with Fn-layer controls |
+
 ## Quick Start
 
-1. **Setup QMK**: `./scripts/setup_qmk.sh`
-2. **Build firmware**: `QMK_DIR=~/qmk_firmware ./scripts/build.sh --artifacts`
-3. **Flash to keyboard**: `QMK_DIR=~/qmk_firmware ./scripts/flash.sh --easy`
-4. **Run tests**: `./scripts/test.sh`
-5. **Run linting**: `./scripts/lint.sh`
+```bash
+# 1. Setup QMK (Keychron fork with V6 Max support)
+./scripts/setup_qmk.sh
 
-See detailed instructions below for WSL workflows, Podman builds, and VS Code integration.
+# 2. Build firmware
+QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
 
-## Requirements Checklist
+# 3. Flash (see Flashing section below)
+```
 
-This project addresses all original requirements:
+## Keyboard Shortcuts
 
-| Requirement | Implementation |
-|-------------|----------------|
-| **Custom keyboard layout** | Firmware-level Dvorak with Qwerty-position shortcuts for Keychron V6 Max (ANSI knob) |
-| **"Dvorak-QWERTY Command"** | Windows: Ctrl/Alt/GUI trigger Qwerty positions; macOS: Command triggers Qwerty positions |
-| **Windows primary platform** | Windows-first shortcut behavior; macOS support included when low effort |
-| **Hardware features retained** | All keys, lighting, media, and encoder (knob) behavior preserved from stock keymap |
-| **UI editing support** | VIA-enabled for post-flash editing; Keychron Launcher compatible |
-| **Thorough testing** | Unit tests ([`tests/test_shortcuts_mapping.py`](tests/test_shortcuts_mapping.py)), integration tests ([`tests/test_integration_simulation.py`](tests/test_integration_simulation.py)), UAT guidance ([`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)) |
-| **WSL-first instructions** | WSL workflow documented for build/flash (see [WSL-first workflow](#wsl-first-workflow-recommended-for-windows-users) section) |
-| **Easy updates** | [`./scripts/update_qmk.sh`](scripts/update_qmk.sh) to update QMK firmware base |
-| **Linting and code standards** | Python (ruff), Shell (shellcheck), C (clang-format) via [`./scripts/lint.sh`](scripts/lint.sh) |
-| **VS Code integration** | Tasks, debugging, IntelliSense configured (see [VS Code Integration](#vs-code-integration) section) |
-| **Streamlined building** | Podman-based containerized builds via [`./scripts/build.sh --podman`](scripts/build.sh) |
-| **Rollback instructions** | Documented in [Backup / rollback](#backup--rollback) section |
+### Layout Toggle
+| Combo | Action |
+|-------|--------|
+| **Fn + Caps Lock** | Toggle between Dwerty ↔ QWERTY (saved to EEPROM) |
 
-## Behavior (Windows-first)
-- **Windows base layers**: when **Ctrl/Alt/GUI** is held, send Qwerty-position keycodes for shortcuts.
-- **macOS base layers**: when **Command (GUI)** is held, send Qwerty-position keycodes (mirrors macOS "Dvorak - QWERTY Command").
-- Shift alone does **not** trigger remaps.
-- Remap applies only on base layers.
-- Remapped keys are always unregistered on release, even if modifiers were released first.
-- Encoder and media behavior match the stock keymap.
+### Lighting Controls (Fn layer)
+| Combo | Action |
+|-------|--------|
+| **Fn + Tab** | Toggle RGB on/off |
+| **Fn + Q / A** | Cycle effect forward / backward |
+| **Fn + W / S** | Brightness up / down |
+| **Fn + E / D** | Hue (color) up / down |
+| **Fn + R / F** | Saturation up / down |
+| **Fn + T / G** | Effect speed up / down |
+| **Encoder (Fn)** | Brightness up / down |
 
-Tooling decision and audit summary is recorded below.
+### Connectivity (Fn layer)
+| Combo | Action |
+|-------|--------|
+| **Fn + 1 / 2 / 3** | Bluetooth host 1 / 2 / 3 |
+| **Fn + 4** | 2.4G wireless mode |
+| **Fn + B** | Show battery level |
+| **Fn + N** | Toggle N-key rollover |
 
-## Tooling decision (as of January 14, 2026)
-- **Manufacturer guidance**: Keychron’s official workflow for firmware flashing uses the Keychron Launcher in Cable mode and requires a bootloader entry (hold Esc while plugging in). This is the supported path for recovery and rollback.
-- **Official firmware cadence**: The V6 Max firmware page lists versions up to **1.1.2** (May 15, 2025) with fixes for debounce, lighting effects, and knob behavior. This is the last official release date we should assume as a baseline.
-- **QMK upstream vs Keychron fork**:
-  - Upstream QMK still lacks `keychron/v6_max` support (the upstream `info.json` path 404s).
-  - Keychron’s fork contains V6 Max definitions (the `info.json` is present on `wireless_playground`).
-  - Keychron’s `qmk_firmware` fork shows recent activity (updated Dec 22, 2025 on the Keychron GitHub org listing), so it is not abandoned, but it may still lag upstream QMK.
-- **VIA support**: VIA requires firmware-side enablement (`VIA_ENABLE = yes`) and a compatible keymap target. This repo enables VIA in the keymap so post-flash UI editing is available.
-- **TMK context**: QMK is a fork of TMK and builds on it with a larger feature set and broader keyboard support; TMK alone would require a custom port for V6 Max.
+## Behavior
 
-Decision: use the Keychron QMK fork (`wireless_playground`) until upstream adds V6 Max; keep Launcher and VIA compatibility for UI edits and rollback.
+- **Dwerty mode**: Dvorak typing with QWERTY-position shortcuts (Ctrl/Alt/GUI + key sends QWERTY position)
+- **QWERTY mode**: Standard QWERTY layout (toggle with Fn + Caps Lock)
+- **Shortcut remapping**: Windows uses Ctrl/Alt/GUI; macOS uses Command only
+- **Persistence**: Layout choice saved to EEPROM (survives power cycles)
 
-## UI-based editing after flash
-This keymap is **VIA-enabled** and **Launcher-compatible**:
-- **Keychron Launcher (official)**: recommended for remaps and firmware flashing. Requires a wired USB connection and a Chromium-based browser.
-- **VIA**: supported for post-flash edits. If VIA does not recognize the board, load the V6 Max JSON from Keychron's firmware/JSON page.
+## VIA Support
 
-## Build prerequisites
-- QMK toolchain installed (QMK CLI or `make`).
-- QMK tree with `keychron/v6_max` support (Keychron fork by default).
+This keymap is **VIA-enabled** for visual key remapping and lighting control.
+
+### Setup
+
+1. Open [usevia.app](https://usevia.app) in Chrome/Edge
+2. Go to **Settings** (gear icon) → enable **Show Design Tab**
+3. Go to **Design** tab → **Load Draft Definition**
+4. Load [`via/v6_max_ansi_encoder.json`](via/v6_max_ansi_encoder.json) from this repo
+5. Go to **Configure** tab — your keyboard should appear
+
+### What you can do in VIA
+
+- View and edit all 6 layers visually
+- Remap any key
+- Adjust lighting (brightness, effects, color, speed)
+- Changes apply instantly (no reflash needed)
+
+## Build Prerequisites
+
+- QMK toolchain installed (QMK CLI or `make`)
+- QMK tree with `keychron/v6_max` support (Keychron fork)
 
 ### WSL/Ubuntu dependency install (one-time)
+
 ```bash
 python3 -m pip install --user qmk
 sudo apt-get update
-sudo apt-get install -y gcc-arm-none-eabi gcc-avr avr-libc avrdude dfu-programmer dfu-util dos2unix libnewlib-arm-none-eabi
+sudo apt-get install -y gcc-arm-none-eabi dfu-util
 ```
 
-## Setup
-1. Clone a QMK tree that supports V6 Max:
-   ```bash
-   ./scripts/setup_qmk.sh
-   ```
+## Building
 
-2. Copy the keymap into the QMK tree:
-   ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/install_keymap.sh
-   ```
+```bash
+# Clone Keychron QMK fork (one-time)
+./scripts/setup_qmk.sh
 
-3. Build the firmware:
-   ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/build.sh
-   ```
+# Install keymap and build
+QMK_DIR=~/qmk_keychron ./scripts/install_keymap.sh
+QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
+```
 
-4. Optional: copy build artifacts into `./build/`:
-   ```bash
-   QMK_DIR=~/qmk_firmware ./scripts/build.sh --artifacts
-   ```
+Output: `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`
 
 ## Flashing
-### Keychron Launcher (official firmware path)
-- Use Keychron Launcher to flash **official firmware**.
-- Launcher requires a wired USB connection.
-- Use the latest Chrome, Edge, or Opera for the Launcher web app.
-- The official flow does not describe selecting a local `.bin` file.
 
-### Custom firmware (this repo) via QMK Toolbox (Windows/macOS)
-1. Build and copy artifacts:
-   ```bash
-   QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
-   ```
-2. Open QMK Toolbox and load `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`.
-3. Put the keyboard in bootloader mode (hold **Esc** while plugging in USB).
-4. Click **Flash**.
+### Option 1: QMK Toolbox (Windows/macOS GUI)
 
-### Custom firmware (this repo) via CLI (QMK CLI or make)
-#### Standard flash
-```bash
-QMK_DIR=~/qmk_firmware ./scripts/flash.sh
-```
-This prompts you to enter bootloader mode (hold **Esc** while plugging in with cable).
+1. Build: `QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts`
+2. Open QMK Toolbox and load `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`
+3. Put keyboard in bootloader mode: **hold Esc while plugging in USB**
+4. Click **Flash**
 
-#### Easy flash (install keymap + build + flash in one step)
-```bash
-QMK_DIR=~/qmk_firmware ./scripts/flash.sh --easy
-```
+### Option 2: WSL with USB Passthrough (Recommended for WSL users)
 
-## Backup / rollback
-- Download the official V6 Max firmware from Keychron's firmware page.
-- Flash it with Keychron Launcher (preferred) or QMK Toolbox.
+1. Install usbipd-win (Windows Admin PowerShell):
 
-## Updating QMK (firmware base)
-Use this when you want a newer QMK version while keeping the keymap overlay clean:
-```bash
-QMK_DIR=~/qmk_firmware ./scripts/update_qmk.sh
-```
-Notes:
-- The script refuses to update if your QMK repo has local changes.
-- It keeps the current branch unless `QMK_BRANCH` is set.
-- It verifies `keychron/v6_max` still exists after the update.
-
-## WSL-first workflow (recommended for Windows users)
-### Option A: build in WSL, flash in Windows
-1. Build in WSL:
-   ```bash
-   QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
-   ```
-2. Copy the `.bin` from `build/` to Windows and flash using Keychron Launcher or QMK Toolbox.
-
-### Option B: USB passthrough with usbipd-win
-1. Install **usbipd-win** on Windows (Admin PowerShell):
    ```powershell
    winget install usbipd
    ```
-   Restart your terminal after installation.
 
-2. Put keyboard in bootloader mode: **hold Esc while plugging in USB**.
+2. Put keyboard in bootloader mode: **hold Esc while plugging in USB**
 
-3. List devices to find the keyboard (Windows PowerShell):
+3. Find and attach to WSL (Windows Admin PowerShell):
+
    ```powershell
-   usbipd list
-   ```
-   Look for `STM32 BOOTLOADER` or VID `0483` — note the **BUSID** (e.g., `1-4`).
-
-4. Bind and attach to WSL (Admin PowerShell):
-   ```powershell
+   usbipd list                           # Find BUSID for STM32 BOOTLOADER
    usbipd bind --busid <BUSID>
    usbipd attach --wsl --busid <BUSID>
    ```
 
-5. Confirm visibility in WSL:
-   ```bash
-   lsusb
-   ```
-   You should see `STMicroelectronics STM Device in DFU Mode`.
+4. Flash from WSL:
 
-6. Flash from WSL (requires sudo for USB access):
    ```bash
    sudo dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D ~/dwerty/build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin
    ```
 
-7. Detach when done (Windows PowerShell):
+5. Detach when done:
+
    ```powershell
    usbipd detach --busid <BUSID>
    ```
 
-#### Optional: avoid sudo for future flashes
-Add a udev rule to allow non-root access to STM32 DFU devices:
+### Option 3: Copy to Windows
+
+1. Build in WSL: `QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts`
+2. Copy `build/*.bin` to Windows
+3. Flash using Keychron Launcher or QMK Toolbox
+
+## Backup / Rollback
+
+Download the official V6 Max firmware from Keychron's firmware page and flash it with Keychron Launcher or QMK Toolbox.
+
+## Testing & Linting
+
 ```bash
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666"' | sudo tee /etc/udev/rules.d/50-stm32-dfu.rules
-sudo udevadm control --reload-rules
+./scripts/test.sh    # Run unit tests
+./scripts/lint.sh    # Run all linters (Python, Shell, C)
 ```
-Then detach/reattach the keyboard via usbipd.
-
-### WSL + usbipd UAT workflow (manual smoke test)
-See `docs/INTEGRATION_TESTING.md` for the full checklist.
-
-## Linting
-The project includes linting configuration for code quality:
-
-### Run all linters
-```bash
-./scripts/lint.sh
-```
-
-### Run specific linters
-```bash
-./scripts/lint.sh --python   # Python files (ruff)
-./scripts/lint.sh --shell    # Shell scripts (shellcheck)
-./scripts/lint.sh --c        # C code formatting (clang-format)
-```
-
-### Linting tools
-- **Python**: `ruff` (configured in [`pyproject.toml`](pyproject.toml))
-- **Shell scripts**: `shellcheck` (configured in [`.shellcheckrc`](.shellcheckrc))
-- **C code**: `clang-format` (configured in [`.clang-format`](.clang-format), aligned with QMK style)
-
-### Install linting tools
-```bash
-pip install ruff
-sudo apt-get install shellcheck clang-format
 ```
 
 Linting runs automatically in CI before tests.
