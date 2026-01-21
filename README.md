@@ -10,7 +10,7 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 |---------|-------------|
 | **Dwerty typing** | Dvorak layout with QWERTY-position shortcuts (Ctrl+C/V/Z work as expected) |
 | **Layer cycling** | **Fn + Z / X** cycles layers down/up and shows a brief number-row indicator |
-| **Visual indicator** | Tab key glows **red** for Dwerty, **yellow** for QWERTY |
+| **Visual indicator** | Tab key glows **red** for Dwerty, **yellow** for QWERTY, **blue** for other layers |
 | **6 layers** | MAC_BASE, MAC_FN, WIN_BASE, WIN_FN, WIN_QWERTY, WIN_QWERTY_FN |
 | **VIA support** | Full VIA compatibility for visual key remapping and lighting control |
 | **RGB lighting** | All stock lighting effects preserved with Fn-layer controls |
@@ -25,6 +25,8 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
    usbipd bind --busid <BUSID>
    usbipd attach --wsl --busid <BUSID>
    ```
+
+   If usbipd.exe is available in WSL, `scripts/firmware.sh` will auto-attach the STM32 BOOTLOADER when it is shared.
 
 3. One-line build + flash from WSL:
 
@@ -67,7 +69,7 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - **QWERTY mode**: Standard QWERTY layout (use `LAYOUT_QWERTY` in VIA or cycle to the QWERTY layer)
 - **Shortcut remapping**: Windows uses Ctrl/Alt/GUI; macOS uses Command only
 - **Layer cycling**: Fn + Z / X briefly blanks lighting, shows the layer index on the number row, then restores effects
-- **Layout indicator**: Tab is red in Dwerty and yellow in QWERTY
+- **Layout indicator**: Tab is red in Dwerty, yellow in QWERTY, and blue in other layers
 - **Persistence**: Default layout choice saved to EEPROM (survives power cycles)
 
 ## VIA Support

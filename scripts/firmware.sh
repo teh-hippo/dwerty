@@ -49,6 +49,60 @@ fail() {
   exit 1
 }
 
+is_wsl() {
+  grep -qi microsoft /proc/version 2>/dev/null || [[ -n "${WSL_INTEROP:-}" ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]
+}
+
+usbipd_path() {
+  if command -v usbipd.exe >/dev/null 2>&1; then
+    command -v usbipd.exe
+    return 0
+  fi
+  if [[ -x /mnt/c/Windows/System32/usbipd.exe ]]; then
+    echo "/mnt/c/Windows/System32/usbipd.exe"
+    return 0
+  fi
+  return 1
+}
+
+ensure_usbipd_attached() {
+  if ! is_wsl; then
+    return 0
+  fi
+
+  local usbipd_bin
+  if ! usbipd_bin=$(usbipd_path); then
+    echo "usbipd.exe not available; skipping WSL attach check." >&2
+    return 0
+  fi
+
+  while true; do
+    local entry busid state
+    entry=$("${usbipd_bin}" list 2>/dev/null | awk '/STM32[[:space:]]+BOOTLOADER/ {bus=$1; getline; state=$1; print bus "|" state; exit}')
+    if [[ -z "${entry}" ]]; then
+      echo "Waiting for STM32 BOOTLOADER (hold Esc while plugging in USB)..." >&2
+      sleep 2
+      continue
+    fi
+
+    busid="${entry%%|*}"
+    state="${entry##*|}"
+
+    if [[ "${state}" == "Attached" ]]; then
+      echo "usbipd: STM32 BOOTLOADER attached at ${busid}." >&2
+      return 0
+    fi
+
+    echo "usbipd: STM32 BOOTLOADER detected (${state}); attaching..." >&2
+    if "${usbipd_bin}" attach --wsl --busid "${busid}"; then
+      sleep 1
+    else
+      echo "usbipd: attach failed; waiting for device to be shared/attached..." >&2
+      sleep 2
+    fi
+  done
+}
+
 ensure_dirs() {
   mkdir -p "${CACHE_DIR}"
   mkdir -p "${BUILD_DIR}"
@@ -262,6 +316,10 @@ if [[ "${ACTION}" != "all" && "${ACTION}" != "build" && "${ACTION}" != "flash" ]
 fi
 
 ensure_dirs
+
+if [[ "${ACTION}" == "all" || "${ACTION}" == "flash" ]]; then
+  ensure_usbipd_attached
+fi
 
 if [[ "${MODE}" == "podman" ]]; then
   configure_podman_for_action

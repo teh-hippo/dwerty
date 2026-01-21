@@ -95,11 +95,15 @@ static bool is_qwerty_mode(void) {
     return layer == WIN_QWERTY;
 }
 
-#define LAYER_INDICATOR_TIMEOUT_MS 2000
-#define LAYER_INDICATOR_R 0
-#define LAYER_INDICATOR_G 200
-#define LAYER_INDICATOR_B 255
+static bool is_dvorak_layer(uint8_t layer) {
+    return layer == WIN_BASE || layer == MAC_BASE;
+}
 
+static bool is_qwerty_layer(uint8_t layer) {
+    return layer == WIN_QWERTY;
+}
+
+#define LAYER_INDICATOR_TIMEOUT_MS 2000
 static bool layer_indicator_active = false;
 static uint16_t layer_indicator_timer = 0;
 static uint8_t layer_indicator_layer = 0;
@@ -292,7 +296,13 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
             uint8_t col = number_row_cols[display - 1];
             uint8_t led = g_led_config.matrix_co[1][col];
             if (led != NO_LED && led >= led_min && led < led_max) {
-                rgb_matrix_set_color(led, LAYER_INDICATOR_R, LAYER_INDICATOR_G, LAYER_INDICATOR_B);
+                if (is_dvorak_layer(layer_indicator_layer)) {
+                    rgb_matrix_set_color(led, 255, 0, 0); // Red for Dwerty
+                } else if (is_qwerty_layer(layer_indicator_layer)) {
+                    rgb_matrix_set_color(led, 255, 255, 0); // Yellow for QWERTY
+                } else {
+                    rgb_matrix_set_color(led, 0, 0, 255); // Blue for non-layout layers
+                }
             }
             return false;
         }
@@ -301,10 +311,13 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     // Tab is typically at row 2, col 0 in the matrix
     uint8_t tab_led = g_led_config.matrix_co[2][0];
     if (tab_led >= led_min && tab_led < led_max && tab_led != NO_LED) {
-        if (is_qwerty_mode()) {
+        uint8_t layer = get_highest_layer(default_layer_state);
+        if (is_dvorak_layer(layer)) {
+            rgb_matrix_set_color(tab_led, 255, 0, 0); // Red for Dwerty
+        } else if (is_qwerty_layer(layer)) {
             rgb_matrix_set_color(tab_led, 255, 255, 0); // Yellow for QWERTY
         } else {
-            rgb_matrix_set_color(tab_led, 255, 0, 0); // Red for Dwerty
+            rgb_matrix_set_color(tab_led, 0, 0, 255); // Blue for non-layout layers
         }
     }
     return false;
