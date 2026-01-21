@@ -1,6 +1,6 @@
 # Dvorak + Qwerty Shortcuts for Keychron V6 Max
 
-Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty. Windows-first with macOS support.
+Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty.
 
 ## Features
 
@@ -11,7 +11,7 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 - **VIA support**: Full VIA compatibility for visual key remapping
 - **RGB lighting**: All stock effects preserved with Fn-layer controls
 
-## Quick Start (WSL + Podman)
+## Quick Start
 
 1. **Bootloader mode**: Hold Esc while plugging in USB
 2. **Attach to WSL** (Windows Admin PowerShell):
@@ -35,7 +35,6 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 ./scripts/firmware.sh build   # build only
 ./scripts/firmware.sh flash   # flash only
 ./scripts/test.sh             # run tests
-./scripts/lint.sh             # run linters
 ```
 
 ## Keyboard Shortcuts
