@@ -49,3 +49,6 @@ __pycache__/
 
 # Local build artifacts
 build/
+
+# Local caches
+.cache/

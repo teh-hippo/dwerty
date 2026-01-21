@@ -9,30 +9,38 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 | Feature | Description |
 |---------|-------------|
 | **Dwerty typing** | Dvorak layout with QWERTY-position shortcuts (Ctrl+C/V/Z work as expected) |
-| **QWERTY toggle** | **Fn + Caps Lock** switches to standard QWERTY layout (persists across power cycles) |
+| **Layer cycling** | **Fn + Z / X** cycles layers down/up and shows a brief number-row indicator |
 | **Visual indicator** | Tab key glows **cyan** when QWERTY mode is active |
 | **6 layers** | MAC_BASE, MAC_FN, WIN_BASE, WIN_FN, WIN_QWERTY, WIN_QWERTY_FN |
 | **VIA support** | Full VIA compatibility for visual key remapping and lighting control |
 | **RGB lighting** | All stock lighting effects preserved with Fn-layer controls |
 
-## Quick Start
+## Quick Start (WSL + Podman)
 
-```bash
-# 1. Setup QMK (Keychron fork with V6 Max support)
-./scripts/setup_qmk.sh
+1. Put the keyboard in bootloader mode: **hold Esc while plugging in USB**
+2. Attach the device to WSL (Windows Admin PowerShell):
 
-# 2. Build firmware
-QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
+   ```powershell
+   usbipd list                           # Find BUSID for STM32 BOOTLOADER
+   usbipd bind --busid <BUSID>
+   usbipd attach --wsl --busid <BUSID>
+   ```
 
-# 3. Flash (see Flashing section below)
-```
+3. One-line build + flash from WSL:
+
+   ```bash
+   ./scripts/firmware.sh podman
+   ```
 
 ## Keyboard Shortcuts
 
 ### Layout Toggle
 | Combo | Action |
 |-------|--------|
-| **Fn + Caps Lock** | Toggle between Dwerty ↔ QWERTY (saved to EEPROM) |
+| **Fn + Z** | Cycle to previous layer (shows layer number briefly) |
+| **Fn + X** | Cycle to next layer (shows layer number briefly) |
+| **VIA: `LAYOUT_DVORAK`** | Set default layer to Dwerty (saved to EEPROM) |
+| **VIA: `LAYOUT_QWERTY`** | Set default layer to QWERTY (saved to EEPROM) |
 
 ### Lighting Controls (Fn layer)
 | Combo | Action |
@@ -56,9 +64,10 @@ QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
 ## Behavior
 
 - **Dwerty mode**: Dvorak typing with QWERTY-position shortcuts (Ctrl/Alt/GUI + key sends QWERTY position)
-- **QWERTY mode**: Standard QWERTY layout (toggle with Fn + Caps Lock)
+- **QWERTY mode**: Standard QWERTY layout (use `LAYOUT_QWERTY` in VIA or cycle to the QWERTY layer)
 - **Shortcut remapping**: Windows uses Ctrl/Alt/GUI; macOS uses Command only
-- **Persistence**: Layout choice saved to EEPROM (survives power cycles)
+- **Layer cycling**: Fn + Z / X briefly blanks lighting, shows the layer index on the number row, then restores effects
+- **Persistence**: Default layout choice saved to EEPROM (survives power cycles)
 
 ## VIA Support
 
@@ -75,80 +84,37 @@ This keymap is **VIA-enabled** for visual key remapping and lighting control.
 ### What you can do in VIA
 
 - View and edit all 6 layers visually
+- Assign `LAYOUT_DVORAK` / `LAYOUT_QWERTY` to any key for one-tap layout switching
 - Remap any key
 - Adjust lighting (brightness, effects, color, speed)
 - Changes apply instantly (no reflash needed)
 
-## Build Prerequisites
+## Firmware Commands
 
-- QMK toolchain installed (QMK CLI or `make`)
-- QMK tree with `keychron/v6_max` support (Keychron fork)
+The firmware script manages a repo-local cached QMK clone at `.cache/qmk_keychron`.
+It **hard resets and cleans** that clone on every run, then pulls from Keychron’s
+fork automatically. This keeps runs fast and deterministic.
 
-### WSL/Ubuntu dependency install (one-time)
-
-```bash
-python3 -m pip install --user qmk
-sudo apt-get update
-sudo apt-get install -y gcc-arm-none-eabi dfu-util
-```
-
-## Building
+### Podman (recommended)
 
 ```bash
-# Clone Keychron QMK fork (one-time)
-./scripts/setup_qmk.sh
-
-# Install keymap and build
-QMK_DIR=~/qmk_keychron ./scripts/install_keymap.sh
-QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts
+./scripts/firmware.sh podman        # build + flash (default)
+./scripts/firmware.sh podman build  # build only
+./scripts/firmware.sh podman flash  # flash only
 ```
 
-Output: `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`
+The Podman image is rebuilt only when [Containerfile](Containerfile) changes.
+For `flash`/`all`, the script runs Podman via `sudo` when available to access USB.
 
-## Flashing
+### Local (power users)
 
-### Option 1: QMK Toolbox (Windows/macOS GUI)
+```bash
+./scripts/firmware.sh local        # build + flash (default)
+./scripts/firmware.sh local build  # build only
+./scripts/firmware.sh local flash  # flash only
+```
 
-1. Build: `QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts`
-2. Open QMK Toolbox and load `build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin`
-3. Put keyboard in bootloader mode: **hold Esc while plugging in USB**
-4. Click **Flash**
-
-### Option 2: WSL with USB Passthrough (Recommended for WSL users)
-
-1. Install usbipd-win (Windows Admin PowerShell):
-
-   ```powershell
-   winget install usbipd
-   ```
-
-2. Put keyboard in bootloader mode: **hold Esc while plugging in USB**
-
-3. Find and attach to WSL (Windows Admin PowerShell):
-
-   ```powershell
-   usbipd list                           # Find BUSID for STM32 BOOTLOADER
-   usbipd bind --busid <BUSID>
-   usbipd attach --wsl --busid <BUSID>
-   ```
-
-4. Flash from WSL:
-
-   ```bash
-   sudo dfu-util -a 0 -d 0483:df11 -s 0x08000000:leave -D ~/dwerty/build/keychron_v6_max_ansi_encoder_dvorak_qwerty.bin
-   ```
-
-5. Detach when done:
-
-   ```powershell
-   usbipd detach --busid <BUSID>
-   ```
-
-### Option 3: Copy to Windows
-
-1. Build in WSL: `QMK_DIR=~/qmk_keychron ./scripts/build.sh --artifacts`
-2. Copy `build/*.bin` to Windows
-3. Flash using Keychron Launcher or QMK Toolbox
+Local mode requires a working QMK toolchain on your host.
 
 ## Backup / Rollback
 
@@ -161,12 +127,10 @@ Download the official V6 Max firmware from Keychron's firmware page and flash it
 ./scripts/lint.sh    # Run all linters (Python, Shell, C)
 ```
 
-## Podman Build (Optional)
+## WSL USB Detach (when done)
 
-Build firmware in a container without installing QMK on host:
-
-```bash
-./scripts/build.sh --podman
+```powershell
+usbipd detach --busid <BUSID>
 ```
 
 ## Customizing

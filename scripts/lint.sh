@@ -85,14 +85,9 @@ lint_shell() {
   fi
   
   local scripts=(
-    scripts/build.sh
-    scripts/flash.sh
-    scripts/install_keymap.sh
+    scripts/firmware.sh
     scripts/lint.sh
-    scripts/podman_run.sh
-    scripts/setup_qmk.sh
     scripts/test.sh
-    scripts/update_qmk.sh
   )
   
   local failed=0

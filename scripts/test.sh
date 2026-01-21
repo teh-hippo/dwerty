@@ -5,33 +5,17 @@
 #   ./scripts/test.sh                   # Run all tests
 #   ./scripts/test.sh --unit            # Run unit tests only
 #   ./scripts/test.sh --integration     # Run integration tests only
-#   ./scripts/test.sh --build           # Run QMK build verification test
+#   ./scripts/test.sh --build           # Run local QMK build verification
 #   ./scripts/test.sh --lint            # Run linting checks
 #   ./scripts/test.sh --help            # Show this help
-#
-# Environment variables:
-#   QMK_DIR        - Path to QMK firmware (default: $HOME/qmk_firmware)
-#   QMK_REPO       - QMK repository URL (for --build test)
-#   QMK_BRANCH     - QMK branch (for --build test)
 
 set -euo pipefail
-
-QMK_DIR="${QMK_DIR:-}"
-QMK_REPO="${QMK_REPO:-https://github.com/Keychron/qmk_firmware.git}"
-QMK_BRANCH="${QMK_BRANCH:-wireless_playground}"
-TEMP_QMK=""
 
 TEST_TYPE="all"
 
 usage() {
   sed -n '2,12p' "$0" | sed 's/^# \?//'
   exit 0
-}
-
-cleanup() {
-  if [[ -n "${TEMP_QMK}" && -d "${TEMP_QMK}" ]]; then
-    rm -rf "${TEMP_QMK}"
-  fi
 }
 
 run_unit_tests() {
@@ -46,29 +30,7 @@ run_integration_tests() {
 
 run_build_test() {
   echo "Running QMK build verification test..."
-  
-  if [[ -z "${QMK_DIR}" ]]; then
-    TEMP_QMK="$(mktemp -d)"
-    trap cleanup EXIT
-    echo "Cloning QMK from ${QMK_REPO} (${QMK_BRANCH})..."
-    git clone --depth 1 --branch "${QMK_BRANCH}" "${QMK_REPO}" "${TEMP_QMK}"
-    QMK_DIR="${TEMP_QMK}"
-  fi
-  
-  echo "Updating QMK submodules..."
-  (cd "${QMK_DIR}" && git submodule update --init --recursive)
-  
-  if [[ ! -f "${QMK_DIR}/keyboards/keychron/v6_max/info.json" ]]; then
-    echo "V6 Max support not found in QMK_DIR: ${QMK_DIR}" >&2
-    exit 1
-  fi
-  
-  echo "Installing keymap..."
-  QMK_DIR="${QMK_DIR}" ./scripts/install_keymap.sh
-  
-  echo "Building firmware..."
-  QMK_DIR="${QMK_DIR}" ./scripts/build.sh
-  
+  ./scripts/firmware.sh local build
   echo "QMK build verification passed"
 }
 

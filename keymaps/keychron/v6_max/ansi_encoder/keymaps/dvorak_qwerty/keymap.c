@@ -28,6 +28,10 @@ enum layers {
 
 enum custom_keycodes {
     LAYOUT_TG = SAFE_RANGE,
+    LAYOUT_DVORAK,
+    LAYOUT_QWERTY,
+    LAYER_DOWN,
+    LAYER_UP,
 };
 
 #define QD_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -87,8 +91,37 @@ static bool qwerty_shortcuts_layer_active(uint8_t layer) {
 }
 
 static bool is_qwerty_mode(void) {
-    uint8_t default_layer = get_highest_layer(default_layer_state);
-    return default_layer == WIN_QWERTY;
+    uint8_t layer = get_highest_layer(layer_state | default_layer_state);
+    return layer == WIN_QWERTY;
+}
+
+#define LAYER_INDICATOR_TIMEOUT_MS 2000
+#define LAYER_INDICATOR_R 0
+#define LAYER_INDICATOR_G 200
+#define LAYER_INDICATOR_B 255
+
+static bool layer_indicator_active = false;
+static uint16_t layer_indicator_timer = 0;
+static uint8_t layer_indicator_layer = 0;
+
+static const uint8_t number_row_cols[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+static uint8_t layer_cycle_count(void) {
+#ifdef DYNAMIC_KEYMAP_LAYER_COUNT
+    return DYNAMIC_KEYMAP_LAYER_COUNT;
+#else
+    return 6;
+#endif
+}
+
+static uint8_t layer_cycle_current(void) {
+    return get_highest_layer(default_layer_state);
+}
+
+static void show_layer_indicator(uint8_t layer) {
+    layer_indicator_active = true;
+    layer_indicator_timer = timer_read();
+    layer_indicator_layer = layer;
 }
 
 static uint8_t qwerty_shortcuts_mod_mask(uint8_t layer) {
@@ -129,7 +162,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,  BT_HST1,  BT_HST2,  BT_HST3,  P2P4G,    _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,  _______,
         RGB_TOG,  RGB_MOD,  RGB_VAI,  RGB_HUI,  RGB_SAI,  RGB_SPI,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,
         _______,  RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
-        _______,            _______,  _______,  _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
+        _______,            LAYER_DOWN, LAYER_UP, _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
         _______,  _______,  _______,                                _______,                                _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,            _______,  _______),
     [WIN_BASE] = LAYOUT_ansi_109(
         KC_ESC,   KC_F1,    KC_F2,    KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,   KC_F11,   KC_F12,     KC_MUTE,    KC_PSCR,  KC_CTANA, RGB_MOD,  _______,  _______,  _______,  _______,
@@ -142,8 +175,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,  KC_BRID,  KC_BRIU,  KC_TASK,  KC_FILE,  RGB_VAD,  RGB_VAI,  KC_MPRV,  KC_MPLY,  KC_MNXT,  KC_MUTE,  KC_VOLD,  KC_VOLU,    RGB_TOG,    _______,  _______,  RGB_TOG,  _______,  _______,  _______,  _______,
         _______,  BT_HST1,  BT_HST2,  BT_HST3,  P2P4G,    _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,  _______,
         RGB_TOG,  RGB_MOD,  RGB_VAI,  RGB_HUI,  RGB_SAI,  RGB_SPI,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,
-        LAYOUT_TG,RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
-        _______,            _______,  _______,  _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
+        _______,  RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
+        _______,            LAYER_DOWN, LAYER_UP, _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
         _______,  _______,  _______,                                _______,                                _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,            _______,  _______),
     [WIN_QWERTY] = LAYOUT_ansi_109(
         KC_ESC,   KC_F1,    KC_F2,    KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,   KC_F11,   KC_F12,     KC_MUTE,    KC_PSCR,  KC_CTANA, RGB_MOD,  _______,  _______,  _______,  _______,
@@ -156,8 +189,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,  KC_BRID,  KC_BRIU,  KC_TASK,  KC_FILE,  RGB_VAD,  RGB_VAI,  KC_MPRV,  KC_MPLY,  KC_MNXT,  KC_MUTE,  KC_VOLD,  KC_VOLU,    RGB_TOG,    _______,  _______,  RGB_TOG,  _______,  _______,  _______,  _______,
         _______,  BT_HST1,  BT_HST2,  BT_HST3,  P2P4G,    _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,  _______,
         RGB_TOG,  RGB_MOD,  RGB_VAI,  RGB_HUI,  RGB_SAI,  RGB_SPI,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,
-        LAYOUT_TG,RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
-        _______,            _______,  _______,  _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
+        _______,  RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
+        _______,            LAYER_DOWN, LAYER_UP, _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,  
         _______,  _______,  _______,                                _______,                                _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,            _______,  _______)
 };
 
@@ -184,13 +217,38 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
 
     // Handle layout toggle
-    if (keycode == LAYOUT_TG && record->event.pressed) {
-        if (is_qwerty_mode()) {
-            set_single_persistent_default_layer(WIN_BASE);
-        } else {
-            set_single_persistent_default_layer(WIN_QWERTY);
+    if (record->event.pressed) {
+        if (keycode == LAYOUT_TG) {
+            if (is_qwerty_mode()) {
+                set_single_persistent_default_layer(WIN_BASE);
+            } else {
+                set_single_persistent_default_layer(WIN_QWERTY);
+            }
+            return false;
         }
-        return false;
+        if (keycode == LAYOUT_DVORAK) {
+            set_single_persistent_default_layer(WIN_BASE);
+            return false;
+        }
+        if (keycode == LAYOUT_QWERTY) {
+            set_single_persistent_default_layer(WIN_QWERTY);
+            return false;
+        }
+        if (keycode == LAYER_DOWN || keycode == LAYER_UP) {
+            uint8_t count = layer_cycle_count();
+            uint8_t current = layer_cycle_current();
+            uint8_t next = current;
+            if (count > 0) {
+                if (keycode == LAYER_UP) {
+                    next = (current + 1) % count;
+                } else {
+                    next = (current + count - 1) % count;
+                }
+            }
+            set_single_persistent_default_layer(next);
+            show_layer_indicator(next);
+            return false;
+        }
     }
 
     uint8_t row = record->event.key.row;
@@ -223,6 +281,22 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
 // RGB indicator: Tab key glows when QWERTY mode is active
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    if (layer_indicator_active) {
+        if (timer_elapsed(layer_indicator_timer) > LAYER_INDICATOR_TIMEOUT_MS) {
+            layer_indicator_active = false;
+        } else {
+            rgb_matrix_set_color_all(0, 0, 0);
+            uint8_t display = layer_indicator_layer + 1;
+            if (display >= 1 && display <= QD_ARRAY_SIZE(number_row_cols)) {
+                uint8_t col = number_row_cols[display - 1];
+                uint8_t led = g_led_config.matrix_co[1][col];
+                    if (led != NO_LED) {
+                    rgb_matrix_set_color(led, LAYER_INDICATOR_R, LAYER_INDICATOR_G, LAYER_INDICATOR_B);
+                }
+            }
+            return false;
+        }
+    }
     if (is_qwerty_mode()) {
         // Tab key LED index - highlight in cyan/blue when QWERTY active
         // Tab is typically at row 2, col 0 in the matrix

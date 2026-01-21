@@ -65,6 +65,8 @@
       }
     ],
     "customKeycodes": [
+      {"name": "LAYOUT_DVORAK", "title": "Set default layer: Dwerty", "shortName": "DWR"},
+      {"name": "LAYOUT_QWERTY", "title": "Set default layer: Qwerty", "shortName": "QWR"},
       {"name": "Left Option", "title": "Left Option", "shortName": "LOpt"},
       {"name": "Right Option", "title": "Right Option", "shortName": "ROpt"},
       {"name": "Left Cmd", "title": "Left Command", "shortName": "LCmd"},
