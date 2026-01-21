@@ -32,4 +32,10 @@ Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while 
 
 ## VIA Support
 
-Use [usevia.app](https://usevia.app) for visual key remapping. Load [`via/v6_max_ansi_encoder.json`](via/v6_max_ansi_encoder.json) in Settings → Design tab.
+**First time setup:**
+1. Open [usevia.app](https://usevia.app)
+2. Settings → Enable "Show Design tab"
+3. Design tab → "Load Draft Definition" → Select `via/v6_max_ansi_encoder.json`
+4. Configure tab → Authorize device
+
+After loading once, VIA remembers your keyboard. You can then remap keys in real-time without reflashing.
