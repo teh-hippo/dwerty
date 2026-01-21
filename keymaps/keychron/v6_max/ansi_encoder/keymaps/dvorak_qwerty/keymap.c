@@ -205,7 +205,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
 
-    uint8_t layer = get_highest_layer(layer_state);
+    uint8_t layer = get_highest_layer(layer_state | default_layer_state);
 
     if (!qwerty_shortcuts_layer_active(layer) || !qwerty_shortcuts_mods_active(layer)) {
         return true;
