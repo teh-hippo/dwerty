@@ -27,7 +27,7 @@ enum layers {
 };
 
 enum custom_keycodes {
-    LAYOUT_TG = SAFE_RANGE,
+    LAYOUT_TG = NEW_SAFE_RANGE,
     LAYOUT_DVORAK,
     LAYOUT_QWERTY,
     LAYER_DOWN,

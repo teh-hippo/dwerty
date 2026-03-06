@@ -1,8 +1,10 @@
+import json
 import pathlib
 import re
 import unittest
 
 KEYMAP_PATH = pathlib.Path(__file__).resolve().parents[1] / "keymaps" / "keychron" / "v6_max" / "ansi_encoder" / "keymaps" / "dvorak_qwerty" / "keymap.c"
+VIA_PATH = pathlib.Path(__file__).resolve().parents[1] / "via" / "v6_max_ansi_encoder.json"
 
 PAIR_RE = re.compile(r"\{\s*(KC_[A-Z0-9_]+)\s*,\s*(KC_[A-Z0-9_]+)\s*\}")
 
@@ -41,6 +43,33 @@ EXPECTED = {
     ("KC_LBRC", "KC_MINS"),
     ("KC_RBRC", "KC_EQL"),
 }
+
+KEYCHRON_CUSTOM_KEYCODE_NAMES = [
+    "Left Option",
+    "Right Option",
+    "Left Cmd",
+    "Right Cmd",
+    "Misson Control",
+    "Lanuch Pad",
+    "Task View",
+    "File Explorer",
+    "Screen shot",
+    "Cortana",
+    "Siri",
+    "Bluetooth Host 1",
+    "Bluetooth Host 2",
+    "Bluetooth Host 3",
+    "2.4G",
+    "Battery Level",
+]
+
+DWERTY_CUSTOM_KEYCODE_NAMES = [
+    "LAYOUT_TG",
+    "LAYOUT_DVORAK",
+    "LAYOUT_QWERTY",
+    "LAYER_DOWN",
+    "LAYER_UP",
+]
 
 
 class ShortcutMappingTests(unittest.TestCase):
@@ -94,6 +123,17 @@ class ShortcutMappingTests(unittest.TestCase):
         self.assertNotEqual(release_idx, -1, "release handling not found in process_record_user")
         self.assertNotEqual(layer_idx, -1, "layer check not found in process_record_user")
         self.assertLess(release_idx, layer_idx, "release handling should occur before mod checks")
+
+    def test_custom_keycodes_start_from_new_safe_range(self) -> None:
+        text = KEYMAP_PATH.read_text(encoding="utf-8")
+        self.assertIn("LAYOUT_TG = NEW_SAFE_RANGE", text)
+        self.assertNotIn("LAYOUT_TG = SAFE_RANGE", text)
+
+    def test_via_custom_keycodes_preserve_keychron_order(self) -> None:
+        via = json.loads(VIA_PATH.read_text(encoding="utf-8"))
+        custom_names = [item["name"] for item in via["customKeycodes"]]
+        self.assertEqual(custom_names[: len(KEYCHRON_CUSTOM_KEYCODE_NAMES)], KEYCHRON_CUSTOM_KEYCODE_NAMES)
+        self.assertEqual(custom_names[len(KEYCHRON_CUSTOM_KEYCODE_NAMES) :], DWERTY_CUSTOM_KEYCODE_NAMES)
 
 
 if __name__ == "__main__":
