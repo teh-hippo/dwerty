@@ -38,6 +38,7 @@ enum custom_keycodes {
     LAYOUT_DVORAK,
     LAYOUT_QWERTY,
     LAYOUT_SEL,
+    HELP_MODE,
 };
 
 #define QD_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -140,6 +141,10 @@ static const uint8_t selector_led_keys[][2] = {
 #define SELECTOR_LED_COUNT 4
 static const uint8_t selector_brightness[] = {255, 128, 64, 0};
 
+// Help overlay state (active while Fn+/ held)
+static bool help_overlay_active = false;
+static uint16_t help_overlay_timer = 0;
+
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [DWERTY] = LAYOUT_ansi_109(
@@ -168,7 +173,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,  BT_HST1,  BT_HST2,  BT_HST3,  P2P4G,    _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,  _______,
         RGB_TOG,  RGB_MOD,  RGB_VAI,  RGB_HUI,  RGB_SAI,  RGB_SPI,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,  _______,  _______,
         _______,  RGB_RMOD, RGB_VAD,  RGB_HUD,  RGB_SAD,  RGB_SPD,  _______,  _______,  _______,  _______,  _______,  _______,              _______,                                  _______,  _______,  _______,  _______,
-        _______,            LAYOUT_SEL, _______,  _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  _______,              _______,              _______,            _______,  _______,  _______,
+        _______,            LAYOUT_SEL, _______,  _______,  _______,  BAT_LVL,  NK_TOGG,  _______,  _______,  _______,  HELP_MODE,            _______,              _______,            _______,  _______,  _______,
         _______,  _______,  _______,                                _______,                                _______,  _______,  _______,    _______,    _______,  _______,  _______,  _______,            _______,  _______),
 };
 
@@ -193,9 +198,10 @@ void keyboard_post_init_user(void) {
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
-    // Exit layout selector when FN layer deactivates
-    if (layout_selector_active && !layer_state_cmp(state, FN)) {
+    // Exit overlays when FN layer deactivates
+    if (!layer_state_cmp(state, FN)) {
         layout_selector_active = false;
+        help_overlay_active = false;
     }
     return state;
 }
@@ -205,8 +211,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return false;
     }
 
+    // Any keypress while help overlay active (except HELP_MODE itself) exits it
+    if (help_overlay_active && record->event.pressed && keycode != HELP_MODE) {
+        help_overlay_active = false;
+        return false;
+    }
+
     if (record->event.pressed) {
+        if (keycode == HELP_MODE) {
+            help_overlay_active = !help_overlay_active;
+            help_overlay_timer = timer_read();
+            layout_selector_active = false;
+            return false;
+        }
         if (keycode == LAYOUT_SEL) {
+            help_overlay_active = false;
             if (!layout_selector_active) {
                 layout_selector_active = true;
                 layout_selector_timer = timer_read();
@@ -274,7 +293,152 @@ static void layout_mode_color(layout_mode_t mode, uint8_t brightness, uint8_t *r
     }
 }
 
+// Helper: set LED colour with bounds check
+static void help_set_led(uint8_t row, uint8_t col, uint8_t led_min, uint8_t led_max,
+                         uint8_t r, uint8_t g, uint8_t b) {
+    uint8_t led = g_led_config.matrix_co[row][col];
+    if (led != NO_LED && led >= led_min && led < led_max) {
+        rgb_matrix_set_color(led, r, g, b);
+    }
+}
+
+// HSV to RGB helper
+static void hsv_to_rgb_vals(uint8_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_t *b) {
+    HSV hsv = {h, s, v};
+    RGB rgb = hsv_to_rgb_nocie(hsv);
+    *r = rgb.r; *g = rgb.g; *b = rgb.b;
+}
+
+static void render_help_overlay(uint8_t led_min, uint8_t led_max) {
+    uint16_t elapsed = timer_elapsed(help_overlay_timer);
+
+    // Black out everything
+    for (uint8_t i = led_min; i < led_max; i++) {
+        rgb_matrix_set_color(i, 0, 0, 0);
+    }
+
+    // Tab (2,0) — RGB toggle: white blink, 1s cycle
+    {
+        uint8_t v = (elapsed % 1000) < 500 ? 255 : 0;
+        help_set_led(2, 0, led_min, led_max, v, v, v);
+    }
+
+    // Q (2,1) — Effect ↑: cycle 4 colours
+    {
+        static const uint8_t effect_colors[][3] = {{255,0,0}, {0,255,0}, {0,0,255}, {255,255,0}};
+        uint8_t idx = (elapsed / 400) % 4;
+        help_set_led(2, 1, led_min, led_max, effect_colors[idx][0], effect_colors[idx][1], effect_colors[idx][2]);
+    }
+
+    // A (3,1) — Effect ↓: same, offset by half
+    {
+        static const uint8_t effect_colors[][3] = {{255,0,0}, {0,255,0}, {0,0,255}, {255,255,0}};
+        uint8_t idx = ((elapsed + 200) / 400) % 4;
+        help_set_led(3, 1, led_min, led_max, effect_colors[idx][0], effect_colors[idx][1], effect_colors[idx][2]);
+    }
+
+    // W (2,2) — Brightness ↑: white, ramps 30%→100%, 2s cycle
+    {
+        uint8_t v = 76 + (uint8_t)((uint32_t)(elapsed % 2000) * 179 / 2000);
+        help_set_led(2, 2, led_min, led_max, v, v, v);
+    }
+
+    // S (3,2) — Brightness ↓: white, ramps 100%→30%, 2s cycle (inverse of W)
+    {
+        uint8_t v = 255 - (uint8_t)((uint32_t)(elapsed % 2000) * 179 / 2000);
+        help_set_led(3, 2, led_min, led_max, v, v, v);
+    }
+
+    // E (2,3) — Hue ↑: steps through 6 distinct colours, 500ms each
+    {
+        static const uint8_t hue_steps[] = {0, 43, 85, 128, 170, 213};
+        uint8_t idx = (elapsed / 500) % 6;
+        uint8_t r, g, b;
+        hsv_to_rgb_vals(hue_steps[idx], 255, 255, &r, &g, &b);
+        help_set_led(2, 3, led_min, led_max, r, g, b);
+    }
+
+    // D (3,3) — Hue ↓: same steps, offset by 3
+    {
+        static const uint8_t hue_steps[] = {0, 43, 85, 128, 170, 213};
+        uint8_t idx = ((elapsed / 500) + 3) % 6;
+        uint8_t r, g, b;
+        hsv_to_rgb_vals(hue_steps[idx], 255, 255, &r, &g, &b);
+        help_set_led(3, 3, led_min, led_max, r, g, b);
+    }
+
+    // R (2,4) — Saturation ↑: blue, vivid→pastel→vivid, 2s cycle
+    {
+        uint16_t phase = elapsed % 2000;
+        uint8_t s;
+        if (phase < 1000) {
+            s = 255 - (uint8_t)((uint32_t)phase * 225 / 1000);
+        } else {
+            s = 30 + (uint8_t)((uint32_t)(phase - 1000) * 225 / 1000);
+        }
+        uint8_t r, g, b;
+        hsv_to_rgb_vals(170, s, 255, &r, &g, &b);
+        help_set_led(2, 4, led_min, led_max, r, g, b);
+    }
+
+    // F (3,4) — Saturation ↓: blue, pastel→vivid→pastel, 2s cycle (inverse of R)
+    {
+        uint16_t phase = (elapsed + 1000) % 2000;
+        uint8_t s;
+        if (phase < 1000) {
+            s = 255 - (uint8_t)((uint32_t)phase * 225 / 1000);
+        } else {
+            s = 30 + (uint8_t)((uint32_t)(phase - 1000) * 225 / 1000);
+        }
+        uint8_t r, g, b;
+        hsv_to_rgb_vals(170, s, 255, &r, &g, &b);
+        help_set_led(3, 4, led_min, led_max, r, g, b);
+    }
+
+    // T (2,5) — Speed ↑: white fast flash, 50ms on / 50ms off
+    {
+        uint8_t v = (elapsed % 100) < 50 ? 255 : 0;
+        help_set_led(2, 5, led_min, led_max, v, v, v);
+    }
+
+    // G (3,5) — Speed ↓: white slow flash, 200ms on / 200ms off
+    {
+        uint8_t v = (elapsed % 400) < 200 ? 255 : 0;
+        help_set_led(3, 5, led_min, led_max, v, v, v);
+    }
+
+    // Z (4,2) — Layout selector: rotate red→blue→green, 600ms each
+    {
+        uint8_t mode = (elapsed / 600) % 3;
+        uint8_t r = 0, g = 0, b = 0;
+        layout_mode_color((layout_mode_t)mode, 255, &r, &g, &b);
+        help_set_led(4, 2, led_min, led_max, r, g, b);
+    }
+
+    // B (4,6) — Battery: green→yellow→red, 3s cycle
+    {
+        uint16_t phase = elapsed % 3000;
+        uint8_t r, g;
+        if (phase < 1500) {
+            // green→yellow
+            g = 255;
+            r = (uint8_t)((uint32_t)phase * 255 / 1500);
+        } else {
+            // yellow→red
+            r = 255;
+            g = 255 - (uint8_t)((uint32_t)(phase - 1500) * 255 / 1500);
+        }
+        help_set_led(4, 6, led_min, led_max, r, g, 0);
+    }
+}
+
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    // Help overlay: highest priority
+    if (help_overlay_active) {
+        render_help_overlay(led_min, led_max);
+        return false;
+    }
+
     // Layout selector animation: circular Z→A→S→X
     if (layout_selector_active) {
         for (uint8_t i = led_min; i < led_max; i++) {

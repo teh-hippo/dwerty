@@ -84,7 +84,8 @@
       {"name": "LAYOUT_TG", "title": "Toggle default layer: Dwerty/Qwerty", "shortName": "LTG"},
       {"name": "LAYOUT_DVORAK", "title": "Set default layer: Dwerty", "shortName": "DWR"},
       {"name": "LAYOUT_QWERTY", "title": "Set default layer: Qwerty", "shortName": "QWR"},
-      {"name": "LAYOUT_SEL", "title": "Layout selector (hold Fn, press to cycle)", "shortName": "LSel"}
+      {"name": "LAYOUT_SEL", "title": "Layout selector (hold Fn, press to cycle)", "shortName": "LSel"},
+      {"name": "HELP_MODE", "title": "Help overlay (Fn+/ shows feature keys)", "shortName": "Help"}
     ],
     "matrix": {"rows": 6, "cols": 21},
     "layouts": {
