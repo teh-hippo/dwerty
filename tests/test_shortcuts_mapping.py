@@ -67,8 +67,7 @@ DWERTY_CUSTOM_KEYCODE_NAMES = [
     "LAYOUT_TG",
     "LAYOUT_DVORAK",
     "LAYOUT_QWERTY",
-    "LAYER_DOWN",
-    "LAYER_UP",
+    "LAYOUT_SEL",
 ]
 
 
@@ -83,18 +82,12 @@ class ShortcutMappingTests(unittest.TestCase):
 
     def test_shortcut_mod_masks_exclude_shift(self) -> None:
         text = KEYMAP_PATH.read_text(encoding="utf-8")
-        win_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK_WIN" in line), "")
-        mac_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK_MAC" in line), "")
+        mod_line = next((line for line in text.splitlines() if "SHORTCUT_MOD_MASK" in line and "#define" in line), "")
 
-        self.assertIn("MOD_MASK_CTRL", win_line)
-        self.assertIn("MOD_MASK_ALT", win_line)
-        self.assertIn("MOD_MASK_GUI", win_line)
-        self.assertNotIn("MOD_MASK_SHIFT", win_line)
-
-        self.assertIn("MOD_MASK_GUI", mac_line)
-        self.assertNotIn("MOD_MASK_CTRL", mac_line)
-        self.assertNotIn("MOD_MASK_ALT", mac_line)
-        self.assertNotIn("MOD_MASK_SHIFT", mac_line)
+        self.assertIn("MOD_MASK_CTRL", mod_line)
+        self.assertIn("MOD_MASK_ALT", mod_line)
+        self.assertIn("MOD_MASK_GUI", mod_line)
+        self.assertNotIn("MOD_MASK_SHIFT", mod_line)
 
     def test_release_path_runs_before_mod_checks(self) -> None:
         text = KEYMAP_PATH.read_text(encoding="utf-8")
@@ -128,6 +121,21 @@ class ShortcutMappingTests(unittest.TestCase):
         text = KEYMAP_PATH.read_text(encoding="utf-8")
         self.assertIn("LAYOUT_TG = NEW_SAFE_RANGE", text)
         self.assertNotIn("LAYOUT_TG = SAFE_RANGE", text)
+
+    def test_layout_mode_enum_exists(self) -> None:
+        text = KEYMAP_PATH.read_text(encoding="utf-8")
+        self.assertIn("LAYOUT_MODE_DWERTY", text)
+        self.assertIn("LAYOUT_MODE_QWERTY", text)
+        self.assertIn("LAYOUT_MODE_DVORAK", text)
+
+    def test_shortcut_interception_checks_layer(self) -> None:
+        text = KEYMAP_PATH.read_text(encoding="utf-8")
+        func_match = re.search(r"qwerty_shortcuts_layer_active\([^)]*\)\s*\{([^}]+)\}", text)
+        self.assertIsNotNone(func_match, "qwerty_shortcuts_layer_active not found")
+        body = func_match.group(1)
+        self.assertIn("DWERTY", body, "should check DWERTY layer")
+        self.assertNotIn("MAC_BASE", body, "should not reference MAC_BASE")
+        self.assertNotIn("WIN_BASE", body, "should not reference WIN_BASE")
 
     def test_via_custom_keycodes_preserve_keychron_order(self) -> None:
         via = json.loads(VIA_PATH.read_text(encoding="utf-8"))

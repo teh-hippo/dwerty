@@ -1,41 +1,58 @@
-# Dvorak + Qwerty Shortcuts for Keychron V6 Max
+# Dwerty — Keychron V6 Max
 
-Firmware keymap for the Keychron V6 Max (ANSI knob) that types **Dvorak** while keeping **Qwerty-position shortcuts**. The OS stays US Qwerty.
+QMK firmware keymap for the Keychron V6 Max (ANSI knob). Types **Dvorak** while keeping **Qwerty-position shortcuts** (Ctrl+C, Ctrl+V, etc.). The OS stays on US Qwerty — all remapping happens in firmware.
 
-## Quick Start
+## Layout Modes
 
-1. **Bootloader mode**: Hold Esc while plugging in USB
-2. **Attach to WSL** (Windows Admin PowerShell):
+Three selectable modes, cycled with **Fn + Z**:
 
-   ```powershell
-   usbipd list
-   usbipd bind --busid <BUSID>
-   usbipd attach --wsl --busid <BUSID>
-   ```
+| Mode | Tab LED | Description |
+|------|---------|-------------|
+| **Dwerty** | 🔴 Red | Dvorak typing + Qwerty shortcuts (Ctrl+C sends Ctrl+C) |
+| **Qwerty** | 🔵 Blue | Standard Qwerty layout |
+| **Dvorak** | 🟢 Green | Pure Dvorak (Ctrl+C sends Ctrl+J — no shortcut remapping) |
 
-3. **Build + flash**:
+Hold **Fn**, press **Z** to enter the layout selector. A circular animation on the Z, A, S, X keys shows the current mode. Each press of Z cycles to the next mode. Release Fn to confirm. The selection persists across reboots.
 
-   ```bash
-   ./scripts/firmware.sh
-   ```
+## Fn Layer (Qwerty key positions)
 
-## Keyboard Shortcuts
+| Key | Function | | Key | Function |
+|-----|----------|-|-----|----------|
+| Z | Layout selector | | 1/2/3 | Bluetooth hosts |
+| Tab | RGB toggle | | 4 | 2.4G |
+| Q/A | RGB effect ↑/↓ | | B | Battery level |
+| W/S | RGB brightness ↑/↓ | | N | N-key rollover toggle |
+| E/D | RGB hue ↑/↓ | | Encoder | RGB brightness ↑/↓ |
+| R/F | RGB saturation ↑/↓ | | | |
+| T/G | RGB speed ↑/↓ | | | |
 
-**Layout Toggle**
-- **Fn + Z/X**: Cycle layers
-- **VIA: `LAYOUT_DVORAK`/`LAYOUT_QWERTY`**: Set default layer
+## Build & Flash
 
-**Fn Layer**
-- Lighting controls: Tab (toggle), Q/A (effects), W/S (brightness), E/D (hue), R/F (saturation), T/G (speed)
-- Encoder: Brightness up/down
-- Connectivity: 1/2/3 (Bluetooth), 4 (2.4G), B (battery), N (N-key rollover)
+Requires Podman. The build runs in a container using Keychron's QMK fork (`wireless_playground` branch).
 
-## VIA Support
+```bash
+./scripts/firmware.sh build    # build only
+./scripts/firmware.sh flash    # flash only (hold Esc while plugging in USB first)
+./scripts/firmware.sh          # build + flash
+```
 
-**First time setup:**
+On WSL, attach the USB bootloader device first:
+
+```powershell
+usbipd list
+usbipd bind --busid <BUSID>
+usbipd attach --wsl --busid <BUSID>
+```
+
+## Tests
+
+```bash
+./scripts/test.sh
+```
+
+## VIA
+
 1. Open [usevia.app](https://usevia.app)
 2. Settings → Enable "Show Design tab"
-3. Design tab → "Load Draft Definition" → Select `via/v6_max_ansi_encoder.json`
+3. Design tab → Load `via/v6_max_ansi_encoder.json`
 4. Configure tab → Authorize device
-
-After loading once, VIA remembers your keyboard. You can then remap keys in real-time without reflashing.

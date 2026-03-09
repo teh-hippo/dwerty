@@ -3,17 +3,13 @@ FROM ubuntu:25.10
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y --no-install-recommends \
       python3 \
       python3-pip \
       python3-venv \
       git \
       build-essential \
       gcc-arm-none-eabi \
-      gcc-avr \
-      avr-libc \
-      avrdude \
-      dfu-programmer \
       dfu-util \
       dos2unix \
       libnewlib-arm-none-eabi \

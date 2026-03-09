@@ -16,6 +16,5 @@
 
 #pragma once
 
-// Increase layer count to support QWERTY toggle layers
-// (MAC_BASE, MAC_FN, WIN_BASE, WIN_FN, WIN_QWERTY, WIN_QWERTY_FN)
-#define DYNAMIC_KEYMAP_LAYER_COUNT 6
+// 4 layers: DWERTY, QWERTY, DVORAK, FN
+#define DYNAMIC_KEYMAP_LAYER_COUNT 4
