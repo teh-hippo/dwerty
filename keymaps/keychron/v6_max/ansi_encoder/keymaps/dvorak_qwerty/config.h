@@ -18,3 +18,12 @@
 
 // 4 layers: DWERTY, QWERTY, DVORAK, FN
 #define DYNAMIC_KEYMAP_LAYER_COUNT 4
+
+// Match official V6 Max firmware 1.1.2.
+// info_config.h is -included before keymap config.h (build_keyboard.mk
+// line 356 vs 437), so its #ifndef guards fire first. #undef is required.
+#undef DEVICE_VER
+#define DEVICE_VER 0x0112
+
+#undef DEBOUNCE
+#define DEBOUNCE 50
