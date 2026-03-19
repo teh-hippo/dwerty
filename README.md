@@ -74,15 +74,29 @@ usbipd attach --wsl --busid <BUSID>
 
 The flash script auto-detects and attaches if `usbipd.exe` is in PATH.
 
-## CI/CD
+## Releases & Versioning
 
-A GitHub Actions workflow builds the firmware and creates a release when a `v*` tag is pushed.
+This project uses two independent version numbers:
+
+| Version | What it means | Where it lives |
+|---------|---------------|----------------|
+| **Keychron firmware version** (e.g. 1.1.2) | USB `DEVICE_VER` — pinned to the official Keychron release we're based on. The Launcher uses this to identify firmware compatibility. | `config.h` (`DEVICE_VER`) |
+| **Dwerty release** (e.g. dwerty-1.0.0) | Our keymap/project version. Tracks layout changes, build fixes, new features. | Git tags, GitHub Releases |
+
+### Downloading firmware
+
+Pre-built `.bin` files are attached to [GitHub Releases](../../releases). Each release includes a SHA256 checksum for verification. Flash with the [Keychron Launcher](https://launcher.keychron.com) or DFU tool.
+
+> **Note:** QMK embeds the build date in the binary. VIA uses this to detect firmware changes and may reset your keymaps when flashing a binary built on a different date than your current firmware. This is standard QMK/VIA behaviour, not specific to this project.
+
+### Creating a release
 
 ```bash
-git tag v1.1.2 && git push --tags
+git tag dwerty-1.0.0
+git push --tags
 ```
 
-The `.bin` file is attached to the GitHub Release automatically.
+The GitHub Actions workflow builds the firmware and creates a release with the `.bin` and `.sha256` attached.
 
 ## Tests
 
