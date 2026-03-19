@@ -1,0 +1,68 @@
+name: Build Firmware
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      QMK_REPO: https://github.com/Keychron/qmk_firmware.git
+      QMK_BRANCH: wireless_playground
+      KEYBOARD: keychron/v6_max/ansi_encoder
+      KEYMAP: dvorak_qwerty
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t dwerty-qmk -f Containerfile .
+
+      - name: Clone QMK and compile firmware
+        run: |
+          docker run --rm \
+            -e QMK_REPO -e QMK_BRANCH -e KEYBOARD -e KEYMAP \
+            -v "${{ github.workspace }}:/workspace:Z" \
+            -w /workspace \
+            dwerty-qmk /bin/bash -lc '
+              set -euo pipefail
+
+              git clone --depth 1 --branch "$QMK_BRANCH" "$QMK_REPO" /qmk
+              git -C /qmk submodule update --init --recursive --depth 1
+
+              src="/workspace/keymaps/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
+              dest="/qmk/keyboards/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
+              mkdir -p "$(dirname "$dest")"
+              cp -a "$src" "$dest"
+
+              rules="/qmk/keyboards/keychron/v6_max/rules.mk"
+              if ! grep -q "SNAP_CLICK_ENABLE" "$rules"; then
+                sed -i "1i SNAP_CLICK_ENABLE=yes\nKEYCHRON_RGB_ENABLE=yes\n" "$rules"
+              fi
+
+              cd /qmk && qmk compile -kb "$KEYBOARD" -km "$KEYMAP"
+
+              mkdir -p /workspace/build
+              cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin" /workspace/build/ || true
+              cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.hex" /workspace/build/ || true
+            '
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: build/keychron_v6_max_ansi_encoder_*.bin
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/keychron_v6_max_ansi_encoder_*.bin
+          generate_release_notes: true
