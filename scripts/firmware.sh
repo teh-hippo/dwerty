@@ -221,7 +221,20 @@ fi'
   podman_run "${cmd}"
 }
 
-build_firmware() {
+KEYBOARD_RULES="/qmk/keyboards/keychron/v6_max/rules.mk"
+KEYBOARD_CONFIG="/qmk/keyboards/keychron/v6_max/config.h"
+
+# Prepare the QMK tree: copy keymap and apply patches that Keychron added to
+# V3 Max (8b525cb770) but not V6 Max yet.
+#
+# 1. SNAP_CLICK_ENABLE and KEYCHRON_RGB_ENABLE must be set in the keyboard
+#    rules.mk BEFORE the include keychron_common.mk line because its ifeq
+#    guards are evaluated inline (keymap rules.mk is too late).
+#
+# 2. config.h needs #include "eeconfig_kb.h" early so EECONFIG_KB_DATA_SIZE
+#    is defined before eeconfig.h's #ifndef guard fires (avoids -Werror
+#    redefinition), and EECONFIG_SIZE_CUSTOM_RGB is visible for RGB guards.
+prepare_qmk_tree() {
   local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
 export SKIP_GIT=1
@@ -230,6 +243,25 @@ dest="/qmk/keyboards/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
 rm -rf "$dest"
 mkdir -p "$(dirname "$dest")"
 cp -a "$src" "$dest"
+
+rules="'"${KEYBOARD_RULES}"'"
+if ! grep -q "SNAP_CLICK_ENABLE" "$rules"; then
+  sed -i "1i SNAP_CLICK_ENABLE=yes\nKEYCHRON_RGB_ENABLE=yes\n" "$rules"
+fi
+
+config="'"${KEYBOARD_CONFIG}"'"
+if ! grep -q "eeconfig_kb.h" "$config"; then
+  sed -i "/#pragma once/a\\
+#include \"eeconfig_kb.h\"" "$config"
+fi'
+
+  podman_run "${cmd}"
+}
+
+build_firmware() {
+  local cmd='set -euo pipefail
+git config --global --add safe.directory /qmk
+export SKIP_GIT=1
 
 if command -v qmk >/dev/null 2>&1; then
   (cd /qmk && qmk compile -kb "$KEYBOARD" -km "$KEYMAP")
@@ -259,11 +291,6 @@ flash_firmware() {
   local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
 export SKIP_GIT=1
-src="/workspace/keymaps/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
-dest="/qmk/keyboards/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
-rm -rf "$dest"
-mkdir -p "$(dirname "$dest")"
-cp -a "$src" "$dest"
 
 if command -v qmk >/dev/null 2>&1; then
   (cd /qmk && qmk flash -kb "$KEYBOARD" -km "$KEYMAP")
@@ -291,6 +318,7 @@ fi
 configure_podman_for_action
 ensure_podman_image
 ensure_qmk_repo
+prepare_qmk_tree
 
 case "${ACTION}" in
   all)
