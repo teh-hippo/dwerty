@@ -48,13 +48,15 @@ Press **Fn+/** to light up all Fn feature keys with self-describing animations. 
 
 ## Build & Flash
 
-Requires [Podman](https://podman.io). Builds inside a container using Keychron's QMK fork.
+Requires [Podman](https://podman.io). Builds inside a container (`debian:trixie-slim`) using Keychron's QMK fork.
 
 ```bash
 ./scripts/firmware.sh build    # build only
 ./scripts/firmware.sh flash    # flash only
 ./scripts/firmware.sh          # build + flash
 ```
+
+The build script patches the upstream V6 Max keyboard config at compile time to enable snap click, per-key RGB, and the eeconfig include order fix — matching the changes Keychron applied to V3 Max but not yet to V6 Max on the `wireless_playground` branch.
 
 To enter bootloader: hold **Esc** while plugging in USB.
 
@@ -71,6 +73,16 @@ usbipd attach --wsl --busid <BUSID>
 ```
 
 The flash script auto-detects and attaches if `usbipd.exe` is in PATH.
+
+## CI/CD
+
+A GitHub Actions workflow builds the firmware and creates a release when a `v*` tag is pushed.
+
+```bash
+git tag v1.1.2 && git push --tags
+```
+
+The `.bin` file is attached to the GitHub Release automatically.
 
 ## Tests
 
@@ -92,8 +104,8 @@ The firmware supports both [usevia.app](https://usevia.app) and the [Keychron La
 |---------|--------|
 | VIA JSON (VID/PID/matrix/layouts/menus) | ✅ Exact match with upstream |
 | Wireless (Bluetooth, 2.4G) | ✅ Enabled at board level |
-| Snap click | ✅ Enabled |
-| Per-key RGB / Mixed RGB | ✅ Enabled |
-| Firmware version | ✅ Reports 1.1.2 |
+| Snap click | ✅ Enabled (build-time patch) |
+| Per-key RGB / Mixed RGB | ✅ Enabled (build-time patch) |
+| Firmware version | ✅ Reports 1.1.2 (DEVICE_VER override in config.h) |
+| Debounce | ✅ 50ms (matches official 1.1.2; upstream default is 20) |
 | DIP switch (Mac/Win toggle) | ⚠️ Physical switch is ignored — firmware always applies saved layout mode |
-| Dynamic debounce | ❌ Not enabled (build order conflict with Keychron common code) |
