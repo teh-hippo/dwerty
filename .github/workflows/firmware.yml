@@ -63,6 +63,7 @@ jobs:
               mkdir -p /workspace/build
               cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin" /workspace/build/ || true
               cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.hex" /workspace/build/ || true
+              chmod -R a+rw /workspace/build
             '
 
       - name: Prepare release assets
