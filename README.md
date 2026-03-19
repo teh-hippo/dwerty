@@ -1,8 +1,10 @@
 # Dwerty — Keychron V6 Max
 
+[![Build Firmware](https://github.com/teh-hippo/dwerty/actions/workflows/firmware.yml/badge.svg)](https://github.com/teh-hippo/dwerty/actions/workflows/firmware.yml)
+
 Custom QMK firmware for the Keychron V6 Max (ANSI knob). Types **Dvorak** while keeping **Qwerty-position shortcuts** (Ctrl+C, Ctrl+V, etc.). The OS stays on US Qwerty — all remapping happens in firmware.
 
-Based on Keychron's QMK fork ([`wireless_playground`](https://github.com/Keychron/qmk_firmware/tree/wireless_playground) branch). Reports firmware version **1.1.2** to match the latest official V6 Max release.
+Based on Keychron's QMK fork ([`wireless_playground`](https://github.com/Keychron/qmk_firmware/tree/wireless_playground) branch). Reports firmware version **1.1.2** to match the latest official V6 Max release. Pre-built binaries are available on the [Releases](../../releases) page.
 
 ## Layers
 
@@ -35,7 +37,7 @@ Key positions are labelled by their Qwerty location on the physical keyboard.
 |-----|----------|-|-----|----------|
 | Z | Layout selector | | 1/2/3 | Bluetooth hosts |
 | / | Help overlay | | 4 | 2.4G |
-| Tab | RGB toggle | | B | Battery level |
+| Tab | RGB toggle | | B | Battery level (wireless only) |
 | Q/A | RGB effect ↑/↓ | | N | N-key rollover |
 | W/S | RGB brightness ↑/↓ | | Knob | RGB brightness |
 | E/D | RGB hue ↑/↓ | | | |
