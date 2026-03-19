@@ -24,4 +24,8 @@ RUN python3 -m venv /opt/qmk-venv && \
 
 ENV PATH="/opt/qmk-venv/bin:${PATH}"
 
+# Ensure the venv stays in PATH even under login shells (bash -l),
+# which source /etc/profile and overwrite PATH.
+RUN echo 'export PATH="/opt/qmk-venv/bin:${PATH}"' > /etc/profile.d/qmk-venv.sh
+
 WORKDIR /workspace
