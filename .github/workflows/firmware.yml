@@ -1,8 +1,6 @@
 name: Build Firmware
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
     tags:
@@ -20,76 +18,3 @@ env:
 jobs:
   build:
     runs-on:
-  pull_request:
-    branches: [main] ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build container image
-        run: docker build -t dwerty-qmk -f Containerfile .
-
-      - name: Clone QMK and compile firmware
-        run: |
-          docker run --rm \
-            -e QMK_REPO -e QMK_BRANCH -e KEYBOARD -e KEYMAP \
-            -v "${{ github.workspace }}:/workspace:Z" \
-            -w /workspace \
-            dwerty-qmk /bin/bash -lc '
-              set -euo pipefail
-
-              git clone --depth 1 --branch "$QMK_BRANCH" "$QMK_REPO" /qmk
-              git -C /qmk submodule update --init --recursive --depth 1
-
-              src="/workspace/keymaps/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
-              dest="/qmk/keyboards/keychron/v6_max/ansi_encoder/keymaps/$KEYMAP"
-              mkdir -p "$(dirname "$dest")"
-              cp -a "$src" "$dest"
-
-              # Patch keyboard rules.mk: enable snap click + per-key RGB
-              # (must be before include keychron_common.mk, matching V3 Max)
-              rules="/qmk/keyboards/keychron/v6_max/rules.mk"
-              if ! grep -q "SNAP_CLICK_ENABLE" "$rules"; then
-                sed -i "1i SNAP_CLICK_ENABLE=yes\nKEYCHRON_RGB_ENABLE=yes\n" "$rules"
-              fi
-
-              # Patch keyboard config.h: include eeconfig_kb.h early so
-              # EECONFIG_KB_DATA_SIZE is defined before eeconfig.h guards
-              config="/qmk/keyboards/keychron/v6_max/config.h"
-              if ! grep -q "eeconfig_kb.h" "$config"; then
-                sed -i "/#pragma once/a\\
-              #include \"eeconfig_kb.h\"" "$config"
-              fi
-
-              cd /qmk && qmk compile -kb "$KEYBOARD" -km "$KEYMAP"
-
-              mkdir -p /workspace/build
-              cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin" /workspace/build/ || true
-              cp -f "/qmk/.build/keychron_v6_max_ansi_encoder_${KEYMAP}.hex" /workspace/build/ || true
-              chmod -R a+rw /workspace/build
-            '
-
-      - name: Prepare release assets
-        if: startsWith(github.ref, 'refs/tags/dwerty-')
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          BIN="build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin"
-          RELEASE_BIN="build/${TAG}-keychron_v6_max.bin"
-          cp "$BIN" "$RELEASE_BIN"
-          sha256sum "$RELEASE_BIN" > "${RELEASE_BIN}.sha256"
-
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware
-          path: build/keychron_v6_max_ansi_encoder_*.bin
-
-      - name: Create release
-        if: startsWith(github.ref, 'refs/tags/dwerty-')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            build/dwerty-*-keychron_v6_max.bin
-            build/dwerty-*-keychron_v6_max.bin.sha256
-          generate_release_notes: true
