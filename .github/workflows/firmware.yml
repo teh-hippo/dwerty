@@ -1,6 +1,8 @@
 name: Build Firmware
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     tags:
@@ -17,7 +19,9 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on:
+  pull_request:
+    branches: [main] ubuntu-latest
 
     steps:
       - name: Checkout
