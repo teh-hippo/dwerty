@@ -76,7 +76,7 @@ jobs:
           sha256sum "$RELEASE_BIN" > "${RELEASE_BIN}.sha256"
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware
           path: build/keychron_v6_max_ansi_encoder_*.bin
