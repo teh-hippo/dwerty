@@ -1,0 +1,16 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 14 * * 1"
+
+jobs:
+  analyze:
+    uses: teh-hippo/common-repo-configs/.github/workflows/codeql.yml@56896768e571739c98d1054d430a0914d3138679  # main
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      language: c-cpp
