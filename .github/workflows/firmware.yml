@@ -76,7 +76,7 @@ jobs:
           sha256sum "$RELEASE_BIN" > "${RELEASE_BIN}.sha256"
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: firmware
           path: build/keychron_v6_max_ansi_encoder_*.bin
@@ -84,7 +84,7 @@ jobs:
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/dwerty-')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           files: |
             build/dwerty-*-keychron_v6_max.bin
