@@ -1,0 +1,16 @@
+# ZMK user-config manifest pointing at Keychron's fork.
+#
+# This is the idiomatic zmk-config build path (for CI or a `west build` with
+# -DZMK_CONFIG). The local scripts/build.sh uses the monorepo directly because
+# that is the path proven to work for this fork; both pull the same sources.
+manifest:
+  remotes:
+    - name: keychron
+      url-base: https://github.com/Keychron
+  projects:
+    - name: zmk
+      remote: keychron
+      revision: rtl8762g
+      import: app/west.yml
+  self:
+    path: config

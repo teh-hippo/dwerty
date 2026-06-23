@@ -24,13 +24,13 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Build container image
-        run: docker build -t dwerty-qmk -f Containerfile .
+        run: docker build -t dwerty-qmk -f max/Containerfile max
 
       - name: Clone QMK and compile firmware
         run: |
           docker run --rm \
             -e QMK_REPO -e QMK_BRANCH -e KEYBOARD -e KEYMAP \
-            -v "${{ github.workspace }}:/workspace:Z" \
+            -v "${{ github.workspace }}/max:/workspace:Z" \
             -w /workspace \
             dwerty-qmk /bin/bash -lc '
               set -euo pipefail
@@ -70,8 +70,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/dwerty-')
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          BIN="build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin"
-          RELEASE_BIN="build/${TAG}-keychron_v6_max.bin"
+          BIN="max/build/keychron_v6_max_ansi_encoder_${KEYMAP}.bin"
+          RELEASE_BIN="max/build/${TAG}-keychron_v6_max.bin"
           cp "$BIN" "$RELEASE_BIN"
           sha256sum "$RELEASE_BIN" > "${RELEASE_BIN}.sha256"
 
@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: firmware
-          path: build/keychron_v6_max_ansi_encoder_*.bin
+          path: max/build/keychron_v6_max_ansi_encoder_*.bin
           retention-days: 7
 
       - name: Create release
@@ -87,6 +87,6 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           files: |
-            build/dwerty-*-keychron_v6_max.bin
-            build/dwerty-*-keychron_v6_max.bin.sha256
+            max/build/dwerty-*-keychron_v6_max.bin
+            max/build/dwerty-*-keychron_v6_max.bin.sha256
           generate_release_notes: true

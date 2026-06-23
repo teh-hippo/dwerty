@@ -157,7 +157,14 @@ podman_run() {
   local cmd="$1"
   local extra_args=("${@:2}")
 
-  "${PODMAN_BIN[@]}" run --rm -it \
+  # Allocate a TTY only when attached to one (keeps interactive use working,
+  # but allows non-interactive/CI runs without "the input device is not a TTY").
+  local tty_args=()
+  if [[ -t 0 && -t 1 ]]; then
+    tty_args=(-it)
+  fi
+
+  "${PODMAN_BIN[@]}" run --rm "${tty_args[@]}" \
     "${PODMAN_RUN_NET[@]}" \
     "${PODMAN_USERNS[@]}" \
     -e QMK_DIR="/qmk" \

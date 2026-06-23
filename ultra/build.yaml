@@ -1,0 +1,7 @@
+# Build matrix for the V6 Ultra. The build board is `keychron` (NOT
+# rtl8762gtu_kb): the `keychron` board sources the RTK_DFU Kconfig and the
+# Keychron defconfig the shield expects.
+---
+include:
+  - board: keychron
+    shield: keychron_v6_ultra_ansi

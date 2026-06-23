@@ -1,0 +1,4 @@
+s/.*hid_listener_keycode_pressed.*keycode/pressed: keycode/p
+s/.*hid_listener_keycode_released.*keycode/released: keycode/p
+s/.*hid_register_mod.*Modifiers set to /reg explicit: Modifiers set to /p
+s/.*hid_unregister_mod.*Modifiers set to /unreg explicit: Modifiers set to /p

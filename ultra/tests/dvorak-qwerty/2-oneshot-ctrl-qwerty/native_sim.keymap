@@ -1,0 +1,16 @@
+#include <dt-bindings/zmk/keys.h>
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+#include "../behavior_keymap.dtsi"
+
+&kscan {
+    events = <
+        /* One-shot (sticky) LCTRL, released, THEN tap dq_j.
+         * The sticky modifier must still be active at the morph key press,
+         * so dq_j should morph to Qwerty C and keep Ctrl: Ctrl+C. */
+        ZMK_MOCK_PRESS(1,1,10)
+        ZMK_MOCK_RELEASE(1,1,10)
+        ZMK_MOCK_PRESS(0,0,10)
+        ZMK_MOCK_RELEASE(0,0,10)
+    >;
+};

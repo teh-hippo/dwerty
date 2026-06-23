@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 build/
 .cache/
+
+# ZMK (ultra/) west workspaces and build output
+.west/
+ultra/.cache/
+
+# Transient build logs / container-written config
+*.log
+.gitconfig

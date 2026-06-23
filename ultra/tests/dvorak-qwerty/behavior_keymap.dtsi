@@ -1,0 +1,25 @@
+/* Proof: type Dvorak, but Ctrl/Alt/GUI sends the Qwerty-position key (mod kept).
+ * dq_j sits at the PHYSICAL Qwerty-C position: types Dvorak J normally,
+ * sends Qwerty C when a Ctrl/Alt/GUI modifier is held -> classic Dvorak-Qwerty.
+ */
+/ {
+    behaviors {
+        dq_j: dvorak_qwerty_j {
+            compatible = "zmk,behavior-mod-morph";
+            #binding-cells = <0>;
+            bindings = <&kp J>, <&kp C>;
+            mods = <(MOD_LCTL|MOD_RCTL|MOD_LALT|MOD_RALT|MOD_LGUI|MOD_RGUI)>;
+            keep-mods = <(MOD_LCTL|MOD_RCTL|MOD_LALT|MOD_RALT|MOD_LGUI|MOD_RGUI)>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+        default_layer {
+            bindings = <
+                &dq_j      &kp LCTRL
+                &kp LSHFT  &sk LCTRL
+            >;
+        };
+    };
+};
