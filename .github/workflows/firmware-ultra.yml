@@ -26,7 +26,9 @@ jobs:
         working-directory: ultra
         run: |
           ./scripts/test.sh
-          rm -rf .cache/upstream   # reclaim disk before the fork build
+          # test.sh builds inside Docker as root, so reclaim its workspace with
+          # sudo (root-owned) before the fork build.
+          sudo rm -rf .cache/upstream
 
       - name: Build firmware (Keychron fork) and package OTA
         working-directory: ultra
