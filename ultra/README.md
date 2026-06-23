@@ -15,7 +15,10 @@ The V6 Ultra runs ZMK on a Realtek RTL8762G. Instead of QMK's runtime `process_r
 | 0 | DWERTY | Dvorak keys + 33 `&dq_*` Qwerty-position morphs |
 | 1 | QWERTY | Plain Qwerty |
 | 2 | DVORAK | Plain Dvorak, no morphs |
-| 3 | FN | Stock RGB/Bluetooth/media overlay + `&to 0/1/2` layout selector |
+| 3 | WIN | Mac→Windows overlay held by the Mac/Win slide switch (see below) |
+| 4 | FN | Stock RGB/Bluetooth/media overlay + `&to 0/1/2` layout selector |
+
+The physical Mac/Win slide switch is a continuously-held GPIO that turns on layer 3, a sparse overlay that is transparent everywhere except the function row, the two Mac/Win special keys and the bottom-row modifier order. Sliding to "Win" swaps those to Windows positions (F1–F12, PrintScreen, `LGUI`/`LALT`/`RALT`/`RGUI`) without changing the active typing layer, so the Dwerty morphs keep working on either side. FN (layer 4) sits above the overlay so the `&to 0/1/2` layout selectors are always reachable.
 
 The keymap is generated from the stock shield keymap by [`scripts/gen_keymap.py`](scripts/gen_keymap.py), which keeps Keychron's preamble (their custom behaviours, macros and combos) and rewrites only the layers. Regenerate with:
 
@@ -46,6 +49,7 @@ Both need [Podman](https://podman.io). Each toolchain is set up once into `.cach
 
 - `1-dvorak-and-ctrl-qwerty` — tap types Dvorak; Ctrl+tap sends Ctrl+Qwerty; Shift+tap stays Dvorak.
 - `2-oneshot-ctrl-qwerty` — a sticky (`&sk`) Ctrl still morphs the next key to its Qwerty position.
+- `3-win-overlay-preserves-morph` — with the Mac/Win overlay held active, Ctrl+tap still sends Ctrl+Qwerty (the overlay is transparent at typing positions) while the modifier position swaps Mac→Windows.
 
 ## The device
 
