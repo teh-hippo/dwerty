@@ -59,6 +59,12 @@ Both need [Podman](https://podman.io). Each toolchain is set up once into `.cach
 
 ## Flashing
 
-Not yet exercised on hardware. From reading the fork's DFU code (`app/src/dfu/dfu_common.c`), the bootloader verifies image integrity with a SHA256 stored in the image header (no asymmetric code-signing) and any optional AES layer uses a key hardcoded in the open-source firmware. There is also a back-of-board button (P2_5) that enters an independent DFU app for recovery. So self-built images should be accepted via Keychron's Realtek CFU/DFU path.
+Not yet exercised on hardware, but de-risked. From reading the fork's DFU code (`app/src/dfu/dfu_common.c`), the bootloader verifies image integrity with a SHA256 stored in the image header (no asymmetric code-signing) and any optional AES layer uses a key hardcoded in the open-source firmware. There is also a back-of-board button (P2_5) that enters an independent DFU app for recovery. So self-built images should be accepted via Keychron's Realtek CFU/DFU path.
 
-The one snag is tooling, not signing: the Realtek `prepend_header` OTA packaging tool is x86_64-only, so the final packaging step fails on the aarch64 (Snapdragon) host and needs x86 emulation or an x86 CI runner. `build.sh` therefore treats the compiled `zmk.elf/hex/bin` as the deliverable and tolerates that last step failing. Producing a flashable CFU image is tracked as a separate step.
+The one snag is tooling, not signing: the Realtek `prepend_header` OTA packaging tool is x86_64-only. `build.sh` therefore treats the compiled `zmk.elf/hex/bin` as the deliverable and tolerates that last step failing. `scripts/package.sh` then produces the flashable image, running the x86 tool under `qemu-x86_64` on aarch64 hosts (needs `sudo apt-get install qemu-user`):
+
+```bash
+./scripts/package.sh   # -> ultra/build/zmk_ota_MP.bin (MP/CFU image)
+```
+
+This has been run successfully on aarch64, producing `zmk_ota.bin` (image header) and `zmk_ota_MP.bin` (MP/CFU image). The remaining step needs hardware: hold the back-of-board button to enter DFU and push `zmk_ota_MP.bin` with Keychron's `cfudownloadtool` (Windows). This voids warranty.
