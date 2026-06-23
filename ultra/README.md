@@ -1,5 +1,7 @@
 # Dwerty Ultra — Keychron V6 Ultra 8K (ZMK)
 
+[![Build Ultra Firmware](https://github.com/teh-hippo/dwerty/actions/workflows/firmware-ultra.yml/badge.svg)](https://github.com/teh-hippo/dwerty/actions/workflows/firmware-ultra.yml)
+
 ZMK firmware for the Keychron V6 Ultra 8K that reproduces the "Dwerty" behaviour from the QMK [`max/`](../max) firmware: the base layer types Dvorak, but holding or one-shotting Ctrl/Alt/Win sends the key in its Qwerty physical position (modifier kept), so shortcuts stay in muscle memory. Shift is excluded, so shifted letters still type Dvorak.
 
 > Status: spike. The behaviour is proven with hardware-free tests and the firmware compiles for the real board. Flashing has not been exercised on hardware (see "Flashing").
@@ -33,7 +35,7 @@ The build and the tests run against different ZMK trees, on purpose:
 - **Build** the real firmware on Keychron's fork (`Keychron/zmk@rtl8762g`), board `keychron`, shield `keychron_v6_ultra_ansi`, in the `zmk-build-arm:3.5` container.
 - **Test** the behaviour on upstream `zmkfirmware/zmk` `native_sim` snapshot tests, in the `zmk-build-arm:4.1` container. The fork cannot host-test because its core headers pull in the Realtek HAL (`rtl_pinmux.h`). `&mod_morph` + `keep-mods` is identical between the fork and upstream, so behaviour proven on upstream holds for the real firmware.
 
-Both need [Podman](https://podman.io). Each toolchain is set up once into `.cache/` (gitignored); the first run downloads Zephyr and is slow.
+Both need [Podman](https://podman.io), or Docker if you set `DWERTY_CONTAINER_ENGINE=docker` (CI uses Docker). Each toolchain is set up once into `.cache/` (gitignored); the first run downloads Zephyr and is slow.
 
 ```bash
 ./scripts/build.sh          # compile the real firmware -> ultra/build/zmk.{elf,hex,bin}
@@ -72,3 +74,20 @@ The one snag is tooling, not signing: the Realtek `prepend_header` OTA packaging
 ```
 
 This has been run successfully on aarch64, producing `zmk_ota.bin` (image header) and `zmk_ota_MP.bin` (MP/CFU image). The remaining step needs hardware: hold the back-of-board button to enter DFU and push `zmk_ota_MP.bin` with Keychron's `cfudownloadtool` (Windows). This voids warranty.
+
+## Releases
+
+Releases are published per keyboard from a Git tag. The V6 Ultra uses **`ultra-v<dwerty>`** tags, where `<dwerty>` is our shared Dwerty project version (the same scheme as the V6 Max's `max-v*`). That version is our own and need not match the Keychron firmware version the board reports (currently v1.0.2, the fork's ZMK app version).
+
+Each `ultra-v*` tag runs the behaviour tests, builds the firmware on the Keychron fork, packages the Realtek OTA image, and publishes a **pre-release** (the build is not yet hardware-verified) with these assets:
+
+- `*-keychron_v6_ultra.bin` / `.hex`: the raw compiled image.
+- `*-keychron_v6_ultra_ota_MP.bin`: the Realtek MP/CFU image to flash via `cfudownloadtool`.
+- a `.sha256` for each.
+
+```bash
+git tag ultra-v1.0.0
+git push origin ultra-v1.0.0
+```
+
+Releases stay marked experimental until a build has been flashed and confirmed on real hardware.

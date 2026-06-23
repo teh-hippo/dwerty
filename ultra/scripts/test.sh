@@ -17,7 +17,18 @@ ZMK="${WS}/zmk"
 IMAGE="docker.io/zmkfirmware/zmk-build-arm:4.1"
 ZMK_REPO="https://github.com/zmkfirmware/zmk.git"
 
-USERNS=(--userns=keep-id)
+# Container engine: podman locally (default), or set DWERTY_CONTAINER_ENGINE=docker
+# (e.g. in CI on x86_64). Only podman gets --userns=keep-id and SELinux :Z labels.
+ENGINE="${DWERTY_CONTAINER_ENGINE:-}"
+if [[ -z "${ENGINE}" ]]; then
+  if command -v podman >/dev/null 2>&1; then ENGINE=podman; else ENGINE=docker; fi
+fi
+RUN_FLAGS=(--rm)
+MOUNT=""
+if [[ "${ENGINE}" == "podman" ]]; then
+  RUN_FLAGS+=(--userns=keep-id)
+  MOUNT=":Z"
+fi
 
 if [[ "${1:-}" == "--clean" ]]; then rm -rf "${WS}"; shift; fi
 CASE="${1:-}"
@@ -25,8 +36,8 @@ CASE="${1:-}"
 mkdir -p "${WS}"
 
 run() {
-  podman run --rm "${USERNS[@]}" \
-    -v "${WS}:/ws:Z" -v "${ULTRA_DIR}:/ultra:Z" -w /ws \
+  "${ENGINE}" run "${RUN_FLAGS[@]}" \
+    -v "${WS}:/ws${MOUNT}" -v "${ULTRA_DIR}:/ultra${MOUNT}" -w /ws \
     "${IMAGE}" bash -lc "$1"
 }
 

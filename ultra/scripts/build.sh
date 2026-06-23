@@ -23,7 +23,18 @@ BOARD="keychron"
 SHIELD="keychron_v6_ultra_ansi"
 SHIELD_DIR_REL="app/boards/shields/${SHIELD}"
 
-USERNS=(--userns=keep-id)
+# Container engine: podman locally (default), or set DWERTY_CONTAINER_ENGINE=docker
+# (e.g. in CI on x86_64). Only podman gets --userns=keep-id and SELinux :Z labels.
+ENGINE="${DWERTY_CONTAINER_ENGINE:-}"
+if [[ -z "${ENGINE}" ]]; then
+  if command -v podman >/dev/null 2>&1; then ENGINE=podman; else ENGINE=docker; fi
+fi
+RUN_FLAGS=(--rm)
+MOUNT=""
+if [[ "${ENGINE}" == "podman" ]]; then
+  RUN_FLAGS+=(--userns=keep-id)
+  MOUNT=":Z"
+fi
 
 if [[ "${1:-}" == "--clean" ]]; then
   echo "Removing ${WS} ..."
@@ -33,8 +44,8 @@ fi
 mkdir -p "${WS}"
 
 run() {  # run a command inside the build container, mounting the workspace
-  podman run --rm "${USERNS[@]}" \
-    -v "${WS}:/ws:Z" -v "${ULTRA_DIR}:/ultra:Z" -w /ws \
+  "${ENGINE}" run "${RUN_FLAGS[@]}" \
+    -v "${WS}:/ws${MOUNT}" -v "${ULTRA_DIR}:/ultra${MOUNT}" -w /ws \
     "${IMAGE}" bash -lc "$1"
 }
 

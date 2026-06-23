@@ -1,0 +1,83 @@
+name: Build Ultra Firmware
+
+on:
+  push:
+    tags:
+      - "ultra-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # ubuntu-latest is x86_64, so the Realtek prepend_header packaging tool runs
+  # natively (no qemu) and we use Docker rather than the local Podman default.
+  DWERTY_CONTAINER_ENGINE: docker
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Behaviour tests (upstream ZMK native_sim)
+        working-directory: ultra
+        run: |
+          ./scripts/test.sh
+          rm -rf .cache/upstream   # reclaim disk before the fork build
+
+      - name: Build firmware (Keychron fork) and package OTA
+        working-directory: ultra
+        run: |
+          ./scripts/build.sh
+          ./scripts/package.sh
+
+      - name: Prepare release assets
+        if: startsWith(github.ref, 'refs/tags/ultra-v')
+        id: assets
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Keychron firmware anchor: the fork's ZMK app version (e.g. 1.0.2).
+          V="ultra/.cache/fork/zmk/app/VERSION"
+          MAJ=$(grep -oP 'VERSION_MAJOR\s*=\s*\K[0-9]+' "$V")
+          MIN=$(grep -oP 'VERSION_MINOR\s*=\s*\K[0-9]+' "$V")
+          PAT=$(grep -oP 'PATCHLEVEL\s*=\s*\K[0-9]+' "$V")
+          echo "anchor=${MAJ}.${MIN}.${PAT}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p ultra/release
+          add() {  # add <src> <release-name>
+            cp "$1" "ultra/release/$2"
+            sha256sum "ultra/release/$2" > "ultra/release/$2.sha256"
+          }
+          add ultra/build/zmk.bin        "${TAG}-keychron_v6_ultra.bin"
+          add ultra/build/zmk.hex        "${TAG}-keychron_v6_ultra.hex"
+          add ultra/build/zmk_ota_MP.bin "${TAG}-keychron_v6_ultra_ota_MP.bin"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ultra-firmware
+          path: |
+            ultra/build/zmk.bin
+            ultra/build/zmk.hex
+            ultra/build/zmk_ota_MP.bin
+          retention-days: 7
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/ultra-v')
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        with:
+          name: "Keychron V6 Ultra 8K ${{ github.ref_name }} (experimental)"
+          prerelease: true
+          body: |
+            Experimental Dwerty firmware for the Keychron V6 Ultra 8K (ZMK).
+
+            Built on Keychron's ZMK fork (rtl8762g), which reports firmware version v${{ steps.assets.outputs.anchor }}.
+
+            This build has not been verified on hardware yet, and flashing self-built firmware voids your warranty. To flash, hold the back-of-board button (P2_5) to enter DFU, then push the *_ota_MP.bin image with Keychron's cfudownloadtool (Windows). SHA256 sums are attached.
+          files: |
+            ultra/release/ultra-v*
+          generate_release_notes: true

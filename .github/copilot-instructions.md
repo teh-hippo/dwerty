@@ -62,3 +62,11 @@ cd ultra
 - Keep the Dvorak→Qwerty pairs identical to `max`'s `qwerty_shortcut_map[]`. When that map changes, update both firmwares.
 - Behaviour tests are ZMK `native_sim` snapshots (`tests/<case>/native_sim.keymap` + `events.patterns` + `keycode_events.snapshot`).
 - Flashing uses Realtek DFU (no UF2). The RTK `prepend_header` packaging tool is x86_64-only and fails on aarch64 hosts.
+
+## CI & releases
+
+Two GitHub Actions workflows, one per keyboard:
+- `.github/workflows/firmware-max.yml` (**Build Max Firmware**) builds the QMK firmware on push to `main`, on PRs touching `max/**`, and on `max-v*` tags.
+- `.github/workflows/firmware-ultra.yml` (**Build Ultra Firmware**) runs only on `ultra-v*` tags and `workflow_dispatch` (the ZMK build is slow). It reuses `ultra/scripts/{test,build,package}.sh` with `DWERTY_CONTAINER_ENGINE=docker`.
+
+Releases are per keyboard and share one **Dwerty** project version: tag `max-v<x.y.z>` or `ultra-v<x.y.z>`. That Dwerty version is our own; it is separate from the **Keychron anchor** each firmware reports for compatibility (V6 Max `DEVICE_VER` 1.1.2; V6 Ultra fork `app/VERSION` 1.0.2). The V6 Ultra release is published as an experimental pre-release (not yet hardware-verified) and includes the Realtek `zmk_ota_MP.bin`.

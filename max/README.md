@@ -1,6 +1,6 @@
 # Dwerty — Keychron V6 Max
 
-[![Build Firmware](https://github.com/teh-hippo/dwerty/actions/workflows/firmware.yml/badge.svg)](https://github.com/teh-hippo/dwerty/actions/workflows/firmware.yml)
+[![Build Max Firmware](https://github.com/teh-hippo/dwerty/actions/workflows/firmware-max.yml/badge.svg)](https://github.com/teh-hippo/dwerty/actions/workflows/firmware-max.yml)
 
 Custom QMK firmware for the Keychron V6 Max (ANSI knob). Types **Dvorak** while keeping **Qwerty-position shortcuts** (Ctrl+C, Ctrl+V, etc.). The OS stays on US Qwerty — all remapping happens in firmware.
 
@@ -82,23 +82,25 @@ This project uses two independent version numbers:
 
 | Version | What it means | Where it lives |
 |---------|---------------|----------------|
-| **Keychron firmware version** (e.g. 1.1.2) | USB `DEVICE_VER` — pinned to the official Keychron release we're based on. The Launcher uses this to identify firmware compatibility. | `config.h` (`DEVICE_VER`) |
-| **Dwerty release** (e.g. dwerty-1.0.0) | Our keymap/project version. Tracks layout changes, build fixes, new features. | Git tags, GitHub Releases |
+| **Keychron firmware version** (1.1.2) | USB `DEVICE_VER`, pinned to the official Keychron V6 Max release so the Launcher and VIA treat it as compatible firmware. | `config.h` (`DEVICE_VER`) |
+| **Dwerty version** (e.g. 1.0.0) | Our own project version, shared across both the V6 Max and V6 Ultra firmwares. It tracks our layout and build changes and need not match the Keychron firmware version. | Git tags, GitHub Releases |
+
+Releases are per keyboard. The V6 Max is tagged **`max-v<dwerty>`** (the V6 Ultra is `ultra-v<dwerty>`), so one shared Dwerty version covers both keyboards while each is released independently. Each tag builds that keyboard and publishes a GitHub Release with the `.bin`, `.hex` and SHA256 sums attached.
 
 ### Downloading firmware
 
-Pre-built `.bin` files are attached to [GitHub Releases](../../releases). Each release includes a SHA256 checksum for verification. Flash with the [Keychron Launcher](https://launcher.keychron.com) or DFU tool.
+Pre-built `.bin` and `.hex` files are attached to [GitHub Releases](../../releases). Each release includes SHA256 checksums for verification. Flash with the [Keychron Launcher](https://launcher.keychron.com) or DFU tool.
 
 > **Note:** QMK embeds the build date in the binary. VIA uses this to detect firmware changes and may reset your keymaps when flashing a binary built on a different date than your current firmware. This is standard QMK/VIA behaviour, not specific to this project.
 
 ### Creating a release
 
 ```bash
-git tag dwerty-1.0.0
-git push --tags
+git tag max-v1.0.0
+git push origin max-v1.0.0
 ```
 
-The GitHub Actions workflow builds the firmware and creates a release with the `.bin` and `.sha256` attached.
+The `Build Max Firmware` workflow builds the firmware and publishes the release with the `.bin`, `.hex` and `.sha256` attached.
 
 ## Tests
 
