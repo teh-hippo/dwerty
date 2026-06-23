@@ -9,11 +9,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # ubuntu-latest is x86_64, so the Realtek prepend_header packaging tool runs
-  # natively (no qemu) and we use Docker rather than the local Podman default.
-  DWERTY_CONTAINER_ENGINE: docker
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,11 +19,13 @@ jobs:
 
       - name: Behaviour tests (upstream ZMK native_sim)
         working-directory: ultra
+        # The scripts auto-detect the Podman preinstalled on ubuntu-latest and
+        # run it with --userns=keep-id, so container-written files stay owned by
+        # the runner (matching local) and need no sudo to clean up. The x86
+        # Realtek prepend_header in package.sh also runs natively here (no qemu).
         run: |
           ./scripts/test.sh
-          # test.sh builds inside Docker as root, so reclaim its workspace with
-          # sudo (root-owned) before the fork build.
-          sudo rm -rf .cache/upstream
+          rm -rf .cache/upstream   # reclaim disk before the fork build
 
       - name: Build firmware (Keychron fork) and package OTA
         working-directory: ultra
