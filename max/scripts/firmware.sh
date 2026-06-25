@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Firmware workflow for Keychron V6 Max Dvorak-QWERTY
 #
-# Usage: ./scripts/firmware.sh [all|build|flash]
-# Defaults to "all" (build + flash)
+# Usage: ./scripts/firmware.sh [all|build|flash|flash-release [tag]]
+# Defaults to "all" (build + flash). flash-release downloads a GitHub release
+# .bin (latest max-v* tag by default) with gh and flashes it; no local build.
 
 set -euo pipefail
 
 ACTION="${1:-all}"
+RELEASE_TAG="${2:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -51,10 +53,15 @@ usbipd_path() {
     command -v usbipd.exe
     return 0
   fi
-  if [[ -x /mnt/c/Windows/System32/usbipd.exe ]]; then
-    echo "/mnt/c/Windows/System32/usbipd.exe"
-    return 0
-  fi
+  local candidate
+  for candidate in \
+    "/mnt/c/Program Files/usbipd-win/usbipd.exe" \
+    "/mnt/c/Windows/System32/usbipd.exe"; do
+    if [[ -x "${candidate}" ]]; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -184,7 +191,7 @@ podman_run() {
 }
 
 configure_podman_for_action() {
-  if [[ "${ACTION}" == "flash" || "${ACTION}" == "all" ]]; then
+  if [[ "${ACTION}" == "flash" || "${ACTION}" == "all" || "${ACTION}" == "flash-release" ]]; then
     if [[ "${EUID}" -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
       PODMAN_BIN=(sudo podman)
       HOST_CHOWN=1
@@ -320,12 +327,61 @@ fi'
   podman_run "${cmd}" --privileged --device /dev/bus/usb:/dev/bus/usb
 }
 
+# Resolve the release tag to flash: the explicit second argument, or the newest
+# max-v* GitHub release (gh lists newest first).
+resolve_release_tag() {
+  if [[ -n "${RELEASE_TAG}" ]]; then
+    echo "${RELEASE_TAG}"
+    return 0
+  fi
+  gh release list -L 50 --json tagName \
+    -q 'map(.tagName) | map(select(startswith("max-v"))) | .[0]' 2>/dev/null
+}
+
+# Deploy a pre-built GitHub release: download the .bin with gh, verify its
+# SHA256, then DFU-flash it. No local QMK build or container compile required.
+flash_release() {
+  command -v gh >/dev/null 2>&1 || \
+    fail "gh (GitHub CLI) is required for flash-release. Install gh, or download the .bin from the Releases page and flash with QMK Toolbox."
+
+  local tag
+  tag=$(resolve_release_tag)
+  [[ -n "${tag}" ]] || fail "Could not resolve a max-v* release tag. Pass one: ./scripts/firmware.sh flash-release max-vX.Y.Z"
+
+  local bin_name="${tag}-keychron_v6_max.bin"
+  local bin="${BUILD_DIR}/${bin_name}"
+
+  echo "Downloading ${tag} from GitHub Releases..." >&2
+  gh release download "${tag}" \
+    --pattern "${bin_name}" \
+    --pattern "${bin_name}.sha256" \
+    --dir "${BUILD_DIR}" --clobber \
+    || fail "gh release download failed for ${tag}."
+  [[ -f "${bin}" ]] || fail "Expected asset ${bin_name} not found in release ${tag}."
+
+  local expected actual
+  expected=$(awk '{print $1}' "${bin}.sha256")
+  actual=$(sha256sum "${bin}" | awk '{print $1}')
+  [[ "${expected}" == "${actual}" ]] \
+    || fail "SHA256 mismatch for ${bin_name} (expected ${expected}, got ${actual})."
+  echo "Verified ${bin_name} (sha256 OK)." >&2
+
+  ensure_usbipd_attached
+
+  local cmd='set -euo pipefail
+bin="/workspace/build/'"${bin_name}"'"
+echo "Flashing $bin via dfu-util (stm32-dfu)..."
+dfu-util -a 0 -d 0483:DF11 -s 0x08000000:leave -D "$bin"'
+
+  podman_run "${cmd}" --privileged --device /dev/bus/usb:/dev/bus/usb
+}
+
 if [[ "${ACTION}" == "--help" || "${ACTION}" == "-h" ]]; then
   usage
 fi
 
-if [[ "${ACTION}" != "all" && "${ACTION}" != "build" && "${ACTION}" != "flash" ]]; then
-  fail "Argument must be 'all', 'build', or 'flash'."
+if [[ "${ACTION}" != "all" && "${ACTION}" != "build" && "${ACTION}" != "flash" && "${ACTION}" != "flash-release" ]]; then
+  fail "Argument must be 'all', 'build', 'flash', or 'flash-release'."
 fi
 
 ensure_dirs
@@ -336,18 +392,25 @@ fi
 
 configure_podman_for_action
 ensure_podman_image
-ensure_qmk_repo
-prepare_qmk_tree
 
 case "${ACTION}" in
   all)
+    ensure_qmk_repo
+    prepare_qmk_tree
     build_firmware
     flash_firmware
     ;;
   build)
+    ensure_qmk_repo
+    prepare_qmk_tree
     build_firmware
     ;;
   flash)
+    ensure_qmk_repo
+    prepare_qmk_tree
     flash_firmware
+    ;;
+  flash-release)
+    flash_release
     ;;
 esac

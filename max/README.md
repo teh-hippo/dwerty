@@ -89,9 +89,26 @@ Releases are per keyboard. The V6 Max is tagged **`max-v<dwerty>`** (the V6 Ultr
 
 ### Downloading firmware
 
-Pre-built `.bin` and `.hex` files are attached to [GitHub Releases](../../releases). Each release includes SHA256 checksums for verification. Flash with the [Keychron Launcher](https://launcher.keychron.com) or DFU tool.
+Pre-built `.bin` and `.hex` files are attached to [GitHub Releases](../../releases). Each release includes SHA256 checksums for verification. See [Flashing a release](#flashing-a-release) below.
 
 > **Note:** QMK embeds the build date in the binary. VIA uses this to detect firmware changes and may reset your keymaps when flashing a binary built on a different date than your current firmware. This is standard QMK/VIA behaviour, not specific to this project.
+
+### Flashing a release
+
+Two easy ways to flash a published release, with no local build.
+
+**WSL (one command).** From `max/`, with the [GitHub CLI](https://cli.github.com) signed in:
+
+```bash
+./scripts/firmware.sh flash-release             # newest max-v* release
+./scripts/firmware.sh flash-release max-v2.1.0  # a specific tag
+```
+
+It downloads the release `.bin` with `gh`, verifies the SHA256, then DFU-flashes it. Put the keyboard in bootloader first (hold **Esc** while plugging in USB); on WSL the script attaches the device with `usbipd` automatically.
+
+**Windows (no WSL).** Download the `.bin` from the [Releases](../../releases) page (or `gh release download <tag>`), open [QMK Toolbox](https://github.com/qmk/qmk_toolbox), put the keyboard in bootloader (hold **Esc** while plugging in USB), and flash the `.bin`. QMK Toolbox auto-detects the STM32 DFU device.
+
+The Keychron Launcher only flashes Keychron-hosted firmware, so it cannot flash these custom builds.
 
 ### Creating a release
 
