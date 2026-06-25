@@ -114,7 +114,7 @@ The firmware supports both [usevia.app](https://usevia.app) and the [Keychron La
 
 **usevia.app** — Load `via/v6_max_ansi_encoder.json` as a draft definition (Design tab). Custom keycodes (LAYOUT_TG, LAYOUT_SEL, etc.) are available for remapping.
 
-**Keychron Launcher** — Connects automatically. Advanced menu (snap click, per-key RGB) is enabled. Custom keycodes are not visible in the Launcher (they use a hardcoded JSON).
+**Keychron Launcher** — Connects automatically. Advanced menu (snap click, per-key RGB, bounce time) is enabled. Custom keycodes are not visible in the Launcher (they use a hardcoded JSON).
 
 ## Keychron Compatibility
 
@@ -125,5 +125,5 @@ The firmware supports both [usevia.app](https://usevia.app) and the [Keychron La
 | Snap click | ✅ Enabled (build-time patch) |
 | Per-key RGB / Mixed RGB | ✅ Enabled (build-time patch) |
 | Firmware version | ✅ Reports 1.1.2 (DEVICE_VER override in config.h) |
-| Debounce | ✅ 50ms (matches official 1.1.2; upstream default is 20) |
+| Debounce | ✅ Adjustable in the Launcher ("bounce time"); defaults to `sym_eager_pk` @ 50ms |
 | DIP switch (Mac/Win toggle) | ⚠️ Physical switch is ignored — firmware always applies saved layout mode |

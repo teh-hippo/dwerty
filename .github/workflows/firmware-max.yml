@@ -63,6 +63,16 @@ jobs:
               #include \"eeconfig_kb.h\"" "$config"
               fi
 
+              # Patch keyboard info.json: debounce_type -> custom so
+              # keychron_common.mk builds -DDYNAMIC_DEBOUNCE_ENABLE, which makes
+              # the firmware advertise FEATURE_DYNAMIC_DEBOUNCE over raw HID so the
+              # Launcher shows the "bounce time" Advanced Mode control. Default
+              # algorithm stays sym_eager_pk and the default time stays DEBOUNCE.
+              info="/qmk/keyboards/keychron/v6_max/info.json"
+              if grep -q "\"debounce_type\": \"sym_eager_pk\"" "$info"; then
+                sed -i "s/\"debounce_type\": \"sym_eager_pk\"/\"debounce_type\": \"custom\"/" "$info"
+              fi
+
               cd /qmk && qmk compile -kb "$KEYBOARD" -km "$KEYMAP"
 
               mkdir -p /workspace/build

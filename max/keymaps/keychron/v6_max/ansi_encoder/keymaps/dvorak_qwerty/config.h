@@ -25,5 +25,8 @@
 #undef DEVICE_VER
 #define DEVICE_VER 0x0112
 
+// Default debounce time (ms). The build patches the V6 Max debounce_type to
+// "custom", which enables Keychron's dynamic debounce. This value is the
+// power-on default that the Launcher's "bounce time" control adjusts at runtime.
 #undef DEBOUNCE
 #define DEBOUNCE 50

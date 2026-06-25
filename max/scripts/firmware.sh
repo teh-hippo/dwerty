@@ -230,6 +230,7 @@ fi'
 
 KEYBOARD_RULES="/qmk/keyboards/keychron/v6_max/rules.mk"
 KEYBOARD_CONFIG="/qmk/keyboards/keychron/v6_max/config.h"
+KEYBOARD_INFO="/qmk/keyboards/keychron/v6_max/info.json"
 
 # Prepare the QMK tree: copy keymap and apply patches that Keychron added to
 # V3 Max (8b525cb770) but not V6 Max yet.
@@ -241,6 +242,12 @@ KEYBOARD_CONFIG="/qmk/keyboards/keychron/v6_max/config.h"
 # 2. config.h needs #include "eeconfig_kb.h" early so EECONFIG_KB_DATA_SIZE
 #    is defined before eeconfig.h's #ifndef guard fires (avoids -Werror
 #    redefinition), and EECONFIG_SIZE_CUSTOM_RGB is visible for RGB guards.
+#
+# 3. info.json debounce_type must be "custom" so keychron_common.mk pulls in
+#    debounce/debounce.mk (-DDYNAMIC_DEBOUNCE_ENABLE). That is what makes the
+#    firmware advertise FEATURE_DYNAMIC_DEBOUNCE over raw HID, which is the only
+#    way the Keychron Launcher shows the "bounce time" Advanced Mode control.
+#    Default algorithm stays sym_eager_pk and the default time stays DEBOUNCE.
 prepare_qmk_tree() {
   local cmd='set -euo pipefail
 git config --global --add safe.directory /qmk
@@ -260,6 +267,11 @@ config="'"${KEYBOARD_CONFIG}"'"
 if ! grep -q "eeconfig_kb.h" "$config"; then
   sed -i "/#pragma once/a\\
 #include \"eeconfig_kb.h\"" "$config"
+fi
+
+info="'"${KEYBOARD_INFO}"'"
+if grep -q "\"debounce_type\": \"sym_eager_pk\"" "$info"; then
+  sed -i "s/\"debounce_type\": \"sym_eager_pk\"/\"debounce_type\": \"custom\"/" "$info"
 fi'
 
   podman_run "${cmd}"
