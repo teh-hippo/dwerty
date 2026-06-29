@@ -5,30 +5,50 @@ Sends ONLY the safe read opcodes (model/version) over the 0x8c HID interface and
 prints responses. Never sends START/SEND_BIN/VERIFY/IMAGE_SWITCH, so it cannot
 write or switch firmware. Use to confirm the device speaks sc_dfu before any flash.
 
-Run after `usbipd attach` so /dev/hidraw* exists. Needs: pip install hidapi.
+Talks to /dev/hidraw* directly (the pip `hid` libusb backend cannot claim a kernel
+hidraw interface). Find the right node by its report descriptor (usage page 0x8c).
+Run after `usbipd attach`; node must be readable (sudo chmod 666 /dev/hidrawN).
 """
-import sys, hid
+import glob, os, sys, time
 
-VID, PID = 0x3434, 0x0c60
-OUT_ID, IN_ID = 0xb2, 0xb1
+OUT_ID = 0xb2
 READ_OPS = {0x60: "MODEL_INFO", 0x61: "DFU_VERSION", 0x6e: "RTL_PATCH_VERSION"}
 
 
+def find_node():
+    for n in glob.glob("/dev/hidraw*"):
+        desc = f"/sys/class/hidraw/{os.path.basename(n)}/device/report_descriptor"
+        try:
+            if open(desc, "rb").read(2) == b"\x05\x8c":
+                return n
+        except OSError:
+            pass
+    return None
+
+
 def frame(op, sn=1):
-    body = [0xaa, 0x55, 0x03, (~3) & 0xff, sn, op, op, 0x00]
-    return [OUT_ID] + body + [0] * (64 - len(body))
+    body = [OUT_ID, 0xaa, 0x55, 0x03, (~3) & 0xff, sn, op, op, 0x00]
+    return bytes(body + [0] * (33 - len(body)))
+
+
+def ascii_of(b):
+    return "".join(chr(c) if 32 <= c < 127 else "." for c in b)
 
 
 def main():
-    devs = [d for d in hid.enumerate(VID, PID)]
-    if not devs:
-        print("No 3434:0c60 HID device. Attach via usbipd first.", file=sys.stderr); sys.exit(1)
-    h = hid.device(); h.open(VID, PID); h.set_nonblocking(1)
+    node = find_node()
+    if not node:
+        print("No 0x8c sc_dfu interface. Attach via usbipd and chmod the node.", file=sys.stderr)
+        sys.exit(1)
+    fd = os.open(node, os.O_RDWR | os.O_NONBLOCK)
     for op, name in READ_OPS.items():
-        h.write(frame(op))
-        import time; time.sleep(0.2)
-        print(f"{name}: {h.read(64)}")
-    h.close()
+        os.write(fd, frame(op)); time.sleep(0.2)
+        try:
+            r = os.read(fd, 33)
+        except BlockingIOError:
+            r = b""
+        print(f"{name}: {r.hex()}  |{ascii_of(r)}|")
+    os.close(fd)
 
 
 if __name__ == "__main__":
