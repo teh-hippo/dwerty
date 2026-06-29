@@ -18,20 +18,24 @@
 #include "keychron_common.h"
 
 enum layers {
-    DWERTY,  // 0 — Dvorak layout + Qwerty shortcut interception
-    QWERTY,  // 1 — Qwerty layout
-    DVORAK,  // 2 — Dvorak layout, no shortcut interception
-    FN,      // 3 — Fn-held overlay (F-keys, RGB, BT, layout selector)
+    MAC_QWERTY,  // 0 — Mac Qwerty base (stock); Mac/Win switch on Mac selects 0
+    MAC_DWERTY,  // 1 — Mac Dwerty base + Qwerty shortcut interception
+    WIN_QWERTY,  // 2 — Win Qwerty base (stock); Mac/Win switch on Win selects 2
+    WIN_DWERTY,  // 3 — Win Dwerty base + Qwerty shortcut interception
+    FN,          // 4 — Fn-held overlay (F-keys, RGB, BT, layout selector)
 };
 
+// The DIP handler in v6_max.c does default_layer_set(1 << (win ? 2 : 0)), so the
+// OS half is the layer pair {0,1}=Mac / {2,3}=Win. The persisted bit below adds
+// +1 to land on the Dwerty layer, keeping the choice across Mac/Win switches.
 typedef enum {
-    LAYOUT_MODE_DWERTY = 0,
-    LAYOUT_MODE_QWERTY = 1,
-    LAYOUT_MODE_DVORAK = 2,
+    LAYOUT_MODE_QWERTY = 0,
+    LAYOUT_MODE_DWERTY = 1,
+    LAYOUT_MODE_DVORAK = LAYOUT_MODE_DWERTY,  // retained alias; pure Dvorak dropped
 } layout_mode_t;
 
-#define LAYOUT_MODE_COUNT 3
-#define LAYOUT_MODE_MASK  0x03
+#define LAYOUT_MODE_COUNT 2
+#define LAYOUT_MODE_MASK  0x01
 
 enum custom_keycodes {
     LAYOUT_TG = NEW_SAFE_RANGE,
@@ -90,12 +94,18 @@ static const qwerty_shortcut_map_t qwerty_shortcut_map[] = {
 
 static uint16_t qwerty_shortcut_active[MATRIX_ROWS][MATRIX_COLS];
 
-// Layout mode persisted in EEPROM user data (low 2 bits)
-static layout_mode_t current_layout_mode = LAYOUT_MODE_DWERTY;
+// Dwerty (vs Qwerty) choice persisted in EEPROM user data (low bit). The OS half
+// (Mac/Win) comes from the DIP switch; the saved bit only chooses Dwerty/Qwerty.
+static layout_mode_t current_layout_mode = LAYOUT_MODE_QWERTY;
+
+// Base layer for the current OS half: {0,1}=Mac, {2,3}=Win. Strip the Dwerty bit.
+static uint8_t current_os_base(void) {
+    return (get_highest_layer(default_layer_state) >= WIN_QWERTY) ? WIN_QWERTY : MAC_QWERTY;
+}
 
 static void apply_layout_mode(layout_mode_t mode) {
     current_layout_mode = mode;
-    default_layer_set(1UL << mode);
+    default_layer_set(1UL << (current_os_base() + (mode == LAYOUT_MODE_DWERTY ? 1 : 0)));
 }
 
 static void save_layout_mode(layout_mode_t mode) {
@@ -105,12 +115,12 @@ static void save_layout_mode(layout_mode_t mode) {
 
 static layout_mode_t read_layout_mode(void) {
     uint32_t val = eeconfig_read_user() & LAYOUT_MODE_MASK;
-    if (val >= LAYOUT_MODE_COUNT) val = LAYOUT_MODE_DWERTY;
+    if (val >= LAYOUT_MODE_COUNT) val = LAYOUT_MODE_QWERTY;
     return (layout_mode_t)val;
 }
 
 static bool qwerty_shortcuts_layer_active(uint8_t layer) {
-    return layer == DWERTY;
+    return layer == MAC_DWERTY || layer == WIN_DWERTY;
 }
 
 static bool qwerty_shortcuts_mods_active(uint8_t layer) {
@@ -147,21 +157,34 @@ static uint16_t help_overlay_timer = 0;
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-    [DWERTY] = LAYOUT_ansi_109(
-        KC_ESC,   KC_F1,    KC_F2,    KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,   KC_F11,   KC_F12,     KC_MUTE,    KC_PSCR,  KC_CTANA, RGB_MOD,  _______,  _______,  _______,  _______,
+    // Mac Qwerty base (stock MAC_BASE, MO(FN) for the shared overlay)
+    [MAC_QWERTY] = LAYOUT_ansi_109(
+        KC_ESC,   KC_BRID,  KC_BRIU,  KC_MCTRL, KC_LNPAD, RGB_VAD,  RGB_VAI,  KC_MPRV,  KC_MPLY,  KC_MNXT,  KC_MUTE,  KC_VOLD,  KC_VOLU,    KC_MUTE,    KC_SNAP,  KC_SIRI,  RGB_MOD,  KC_F13,   KC_F14,   KC_F15,   KC_F16,
+        KC_GRV,   KC_1,     KC_2,     KC_3,     KC_4,     KC_5,     KC_6,     KC_7,     KC_8,     KC_9,     KC_0,     KC_MINS,  KC_EQL,     KC_BSPC,    KC_INS,   KC_HOME,  KC_PGUP,  KC_NUM,   KC_PSLS,  KC_PAST,  KC_PMNS,
+        KC_TAB,   KC_Q,     KC_W,     KC_E,     KC_R,     KC_T,     KC_Y,     KC_U,     KC_I,     KC_O,     KC_P,     KC_LBRC,  KC_RBRC,    KC_BSLS,    KC_DEL,   KC_END,   KC_PGDN,  KC_P7,    KC_P8,    KC_P9,
+        KC_CAPS,  KC_A,     KC_S,     KC_D,     KC_F,     KC_G,     KC_H,     KC_J,     KC_K,     KC_L,     KC_SCLN,  KC_QUOT,              KC_ENT,                                   KC_P4,    KC_P5,    KC_P6,    KC_PPLS,
+        KC_LSFT,            KC_Z,     KC_X,     KC_C,     KC_V,     KC_B,     KC_N,     KC_M,     KC_COMM,  KC_DOT,   KC_SLSH,              KC_RSFT,              KC_UP,              KC_P1,    KC_P2,    KC_P3,
+        KC_LCTL,  KC_LOPTN, KC_LCMMD,                               KC_SPC,                                 KC_RCMMD, KC_ROPTN, MO(FN),     KC_RCTL,    KC_LEFT,  KC_DOWN,  KC_RGHT,  KC_P0,              KC_PDOT,  KC_PENT),
+    // Mac Dwerty: Dvorak letters on the Mac modifier row; morphs send the Qwerty
+    // position when Ctrl/Alt/GUI is held (handled in process_record_user).
+    [MAC_DWERTY] = LAYOUT_ansi_109(
+        KC_ESC,   KC_BRID,  KC_BRIU,  KC_MCTRL, KC_LNPAD, RGB_VAD,  RGB_VAI,  KC_MPRV,  KC_MPLY,  KC_MNXT,  KC_MUTE,  KC_VOLD,  KC_VOLU,    KC_MUTE,    KC_SNAP,  KC_SIRI,  RGB_MOD,  KC_F13,   KC_F14,   KC_F15,   KC_F16,
         KC_GRV,   KC_1,     KC_2,     KC_3,     KC_4,     KC_5,     KC_6,     KC_7,     KC_8,     KC_9,     KC_0,     KC_LBRC,  KC_RBRC,    KC_BSPC,    KC_INS,   KC_HOME,  KC_PGUP,  KC_NUM,   KC_PSLS,  KC_PAST,  KC_PMNS,
         KC_TAB,   KC_QUOT,  KC_COMM,  KC_DOT,   KC_P,     KC_Y,     KC_F,     KC_G,     KC_C,     KC_R,     KC_L,     KC_SLSH,  KC_EQL,     KC_BSLS,    KC_DEL,   KC_END,   KC_PGDN,  KC_P7,    KC_P8,    KC_P9,
         KC_CAPS,  KC_A,     KC_O,     KC_E,     KC_U,     KC_I,     KC_D,     KC_H,     KC_T,     KC_N,     KC_S,     KC_MINS,             KC_ENT,                                   KC_P4,    KC_P5,    KC_P6,    KC_PPLS,
         KC_LSFT,            KC_SCLN,  KC_Q,     KC_J,     KC_K,     KC_X,     KC_B,     KC_M,     KC_W,     KC_V,     KC_Z,                KC_RSFT,              KC_UP,              KC_P1,    KC_P2,    KC_P3,
-        KC_LCTL,  KC_LWIN,  KC_LALT,                                KC_SPC,                                 KC_RALT,  KC_RWIN,  MO(FN),     KC_RCTL,    KC_LEFT,  KC_DOWN,  KC_RGHT,  KC_P0,              KC_PDOT,  KC_PENT),
-    [QWERTY] = LAYOUT_ansi_109(
+        KC_LCTL,  KC_LOPTN, KC_LCMMD,                               KC_SPC,                                 KC_RCMMD, KC_ROPTN, MO(FN),     KC_RCTL,    KC_LEFT,  KC_DOWN,  KC_RGHT,  KC_P0,              KC_PDOT,  KC_PENT),
+    // Win Qwerty base (stock WIN_BASE, MO(FN) for the shared overlay)
+    [WIN_QWERTY] = LAYOUT_ansi_109(
         KC_ESC,   KC_F1,    KC_F2,    KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,   KC_F11,   KC_F12,     KC_MUTE,    KC_PSCR,  KC_CTANA, RGB_MOD,  _______,  _______,  _______,  _______,
         KC_GRV,   KC_1,     KC_2,     KC_3,     KC_4,     KC_5,     KC_6,     KC_7,     KC_8,     KC_9,     KC_0,     KC_MINS,  KC_EQL,     KC_BSPC,    KC_INS,   KC_HOME,  KC_PGUP,  KC_NUM,   KC_PSLS,  KC_PAST,  KC_PMNS,
         KC_TAB,   KC_Q,     KC_W,     KC_E,     KC_R,     KC_T,     KC_Y,     KC_U,     KC_I,     KC_O,     KC_P,     KC_LBRC,  KC_RBRC,    KC_BSLS,    KC_DEL,   KC_END,   KC_PGDN,  KC_P7,    KC_P8,    KC_P9,
         KC_CAPS,  KC_A,     KC_S,     KC_D,     KC_F,     KC_G,     KC_H,     KC_J,     KC_K,     KC_L,     KC_SCLN,  KC_QUOT,              KC_ENT,                                   KC_P4,    KC_P5,    KC_P6,    KC_PPLS,
         KC_LSFT,            KC_Z,     KC_X,     KC_C,     KC_V,     KC_B,     KC_N,     KC_M,     KC_COMM,  KC_DOT,   KC_SLSH,              KC_RSFT,              KC_UP,              KC_P1,    KC_P2,    KC_P3,
         KC_LCTL,  KC_LWIN,  KC_LALT,                                KC_SPC,                                 KC_RALT,  KC_RWIN,  MO(FN),     KC_RCTL,    KC_LEFT,  KC_DOWN,  KC_RGHT,  KC_P0,              KC_PDOT,  KC_PENT),
-    [DVORAK] = LAYOUT_ansi_109(
+    // Win Dwerty: Dvorak letters on the Win modifier row; morphs send the Qwerty
+    // position when Ctrl/Alt/GUI is held (handled in process_record_user).
+    [WIN_DWERTY] = LAYOUT_ansi_109(
         KC_ESC,   KC_F1,    KC_F2,    KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,   KC_F11,   KC_F12,     KC_MUTE,    KC_PSCR,  KC_CTANA, RGB_MOD,  _______,  _______,  _______,  _______,
         KC_GRV,   KC_1,     KC_2,     KC_3,     KC_4,     KC_5,     KC_6,     KC_7,     KC_8,     KC_9,     KC_0,     KC_LBRC,  KC_RBRC,    KC_BSPC,    KC_INS,   KC_HOME,  KC_PGUP,  KC_NUM,   KC_PSLS,  KC_PAST,  KC_PMNS,
         KC_TAB,   KC_QUOT,  KC_COMM,  KC_DOT,   KC_P,     KC_Y,     KC_F,     KC_G,     KC_C,     KC_R,     KC_L,     KC_SLSH,  KC_EQL,     KC_BSLS,    KC_DEL,   KC_END,   KC_PGDN,  KC_P7,    KC_P8,    KC_P9,
@@ -179,10 +202,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 #if defined(ENCODER_MAP_ENABLE)
 const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][2] = {
-    [DWERTY]  = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
-    [QWERTY]  = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
-    [DVORAK]  = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
-    [FN]      = {ENCODER_CCW_CW(RGB_VAD, RGB_VAI)},
+    [MAC_QWERTY] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
+    [MAC_DWERTY] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
+    [WIN_QWERTY] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
+    [WIN_DWERTY] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU)},
+    [FN]         = {ENCODER_CCW_CW(RGB_VAD, RGB_VAI)},
 };
 #endif // ENCODER_MAP_ENABLE
 
@@ -217,12 +241,20 @@ uint8_t default_region[RGB_MATRIX_LED_COUNT] = {
 
 void eeconfig_init_user(void) {
     eeconfig_update_user(LAYOUT_MODE_DWERTY);
-    set_single_persistent_default_layer(DWERTY);
+    set_single_persistent_default_layer(MAC_DWERTY);
 }
 
 void keyboard_post_init_user(void) {
-    // Runs after DIP switch init — our saved mode overrides upstream's layer 0/2
+    // Runs after DIP switch init — apply the saved Dwerty/Qwerty bit on top of
+    // the OS half the DIP selected.
     apply_layout_mode(read_layout_mode());
+}
+
+// The DIP handler sets the OS-half Qwerty base (0 Mac / 2 Win); fold in the
+// saved Dwerty bit so the choice survives every Mac/Win switch.
+layer_state_t default_layer_state_set_user(layer_state_t state) {
+    uint8_t base = (get_highest_layer(state) >= WIN_QWERTY) ? WIN_QWERTY : MAC_QWERTY;
+    return 1UL << (base + (current_layout_mode == LAYOUT_MODE_DWERTY ? 1 : 0));
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
@@ -295,7 +327,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
 
-    uint8_t layer = get_highest_layer(layer_state | default_layer_state);
+    uint8_t layer = get_highest_layer(default_layer_state);
 
     if (!qwerty_shortcuts_layer_active(layer) || !qwerty_shortcuts_mods_active(layer)) {
         return true;
@@ -311,13 +343,13 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return false;
 }
 
-// Layout mode colour: Red=Dwerty, Blue=Qwerty, Green=Dvorak
+// Layout mode colour: Red=Dwerty, Blue=Qwerty
 static void layout_mode_color(layout_mode_t mode, uint8_t brightness, uint8_t *r, uint8_t *g, uint8_t *b) {
     *r = 0; *g = 0; *b = 0;
-    switch (mode) {
-        case LAYOUT_MODE_DWERTY: *r = brightness; break;
-        case LAYOUT_MODE_QWERTY: *b = brightness; break;
-        case LAYOUT_MODE_DVORAK: *g = brightness; break;
+    if (mode == LAYOUT_MODE_DWERTY) {
+        *r = brightness;
+    } else {
+        *b = brightness;
     }
 }
 

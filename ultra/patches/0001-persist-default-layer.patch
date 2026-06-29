@@ -1,0 +1,97 @@
+diff --git a/app/src/keymap.c b/app/src/keymap.c
+index 926a99b..ba6cb9e 100644
+--- a/app/src/keymap.c
++++ b/app/src/keymap.c
+@@ -28,9 +28,27 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #include <drivers/behavior.h>
+ #include "./behaviors/behavior_sensor_rotate_common.h"
+ 
++#if IS_ENABLED(CONFIG_SETTINGS)
++#include <zephyr/init.h>
++#include <zephyr/settings/settings.h>
++#endif
++
+ static zmk_keymap_layers_state_t _zmk_keymap_layer_state = 0;
+ static uint8_t _zmk_keymap_layer_default = 0;
+ 
++// Persist the active default layer (the Dwerty/Qwerty + Mac/Win choice) so it
++// survives a reboot, mirroring QMK's set_single_persistent_default_layer. A
++// `&to` with this sentinel toggles within the current OS half (0<->1, 2<->3).
++#define DWERTY_DEFAULT_SETTING "dwerty/def"
++#define DWERTY_TOGGLE 0xFF
++#if IS_ENABLED(CONFIG_SETTINGS)
++static struct k_work_delayable dwerty_save_work;
++static void dwerty_save_work_handler(struct k_work *work) {
++    settings_save_one(DWERTY_DEFAULT_SETTING, &_zmk_keymap_layer_default,
++                      sizeof(_zmk_keymap_layer_default));
++}
++#endif
++
+ #define DT_DRV_COMPAT zmk_keymap
+ 
+ #if !DT_NODE_EXISTS(DT_DRV_INST(0))
+@@ -144,12 +162,25 @@ int zmk_keymap_layer_toggle(uint8_t layer) {
+ };
+ 
+ int zmk_keymap_layer_to(uint8_t layer) {
++    // Sentinel: toggle the Dwerty/Qwerty half (0<->1, 2<->3) without caring
++    // whether Mac (0/1) or Win (2/3) is current; both bits live in the default.
++    if (layer == DWERTY_TOGGLE) {
++        layer = _zmk_keymap_layer_default ^ 1;
++    }
++
+     for (int i = ZMK_KEYMAP_LAYERS_LEN - 1; i >= 0; i--) {
+         zmk_keymap_layer_deactivate(i);
+     }
+ 
++    // Make the target the new default so it persists as the base layer, then
++    // activate it and schedule a debounced save to settings.
++    _zmk_keymap_layer_default = layer;
+     zmk_keymap_layer_activate(layer);
+ 
++#if IS_ENABLED(CONFIG_SETTINGS)
++    k_work_reschedule(&dwerty_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
++#endif
++
+     return 0;
+ }
+ 
+@@ -157,6 +188,38 @@ bool is_active_layer(uint8_t layer, zmk_keymap_layers_state_t layer_state) {
+     return (layer_state & BIT(layer)) == BIT(layer) || layer == _zmk_keymap_layer_default;
+ }
+ 
++#if IS_ENABLED(CONFIG_SETTINGS)
++// Restore the saved default layer on boot so the Dwerty/Qwerty + Mac/Win choice
++// persists across reboots, then arm the debounced save work used by `&to`.
++static int dwerty_settings_load_cb(const char *name, size_t len, settings_read_cb read_cb,
++                                   void *cb_arg, void *param) {
++    const char *next;
++    if (settings_name_steq(name, "def", &next) && !next) {
++        uint8_t saved = 0;
++        if (len != sizeof(saved)) {
++            return -EINVAL;
++        }
++        int rc = read_cb(cb_arg, &saved, sizeof(saved));
++        if (rc >= 0 && saved < ZMK_KEYMAP_LAYERS_LEN) {
++            _zmk_keymap_layer_default = saved;
++        }
++        return MIN(rc, 0);
++    }
++    return -ENOENT;
++}
++
++static int dwerty_keymap_init(void) {
++    settings_subsys_init();
++    int rc = settings_load_subtree_direct("dwerty", dwerty_settings_load_cb, NULL);
++    if (rc != 0) {
++        LOG_ERR("Failed to load dwerty default layer: %d", rc);
++    }
++    k_work_init_delayable(&dwerty_save_work, dwerty_save_work_handler);
++    return 0;
++}
++SYS_INIT(dwerty_keymap_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
++#endif
++
+ const char *zmk_keymap_layer_name(uint8_t layer) {
+     if (layer >= ZMK_KEYMAP_LAYERS_LEN) {
+         return NULL;

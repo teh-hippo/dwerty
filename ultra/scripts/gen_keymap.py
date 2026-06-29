@@ -2,23 +2,23 @@
 """Generate ultra/config/keychron_v6_ultra_ansi.keymap from the stock shield.
 
 We keep the stock keymap's preamble (all of Keychron's custom behaviours,
-macros and combos) and regenerate the keymap node into five layers:
+macros and combos) and regenerate the keymap node into five layers, mirroring
+the QMK max/ firmware (which dropped pure Dvorak):
 
-    0 DWERTY  - Dvorak keys, with a per-key &mod_morph on every position that
-                differs from Qwerty so that holding/one-shotting Ctrl/Alt/GUI
-                sends the Qwerty-position key (modifier kept).
-    1 QWERTY  - the stock Qwerty base, unchanged.
-    2 DVORAK  - plain Dvorak, no morphs.
-    3 WIN     - a sparse Mac->Windows overlay held by the Mac/Win slide switch:
-                transparent except the function row, the Mac/Win special keys
-                and the bottom-row modifier order, so whichever typing layer is
-                active (including the DWERTY morphs) shows through.
-    4 FN      - the stock Mac fn layer + a &to 0/1/2 layout selector.
+    0 MAC_QWERTY - stock Mac base, unchanged.
+    1 MAC_DWERTY - Mac base, Dvorak letters with a per-key &mod_morph on every
+                   position that differs from Qwerty so holding/one-shotting
+                   Ctrl/Alt/GUI sends the Qwerty-position key (modifier kept).
+    2 WIN_QWERTY - stock Win base, unchanged.
+    3 WIN_DWERTY - Win base + the same Dvorak/morphs.
+    4 FN         - stock Mac fn (RGB/BT/media); shared by both halves.
 
-The Mac/Win slide switch is a continuously-held GPIO (stock &mo 2). We point it
-at the WIN overlay (&mo 3) instead of the old Win base layer, so sliding to
-"Win" swaps the modifier order without forcing a different typing layer. FN
-sits above WIN (index 4) so the &to layout selectors are never masked.
+Mac/Win is the native Keychron slide switch: a continuously-held GPIO &mo. On a
+Mac base it holds the matching Win base (Qwerty->&mo 2, Dwerty->&mo 3); on a Win
+base it is stock &none. The fn key becomes &mo 4 on every base. Fn+Z is a combo
+bound to `&to 0xFF`, a sentinel our keymap.c patch turns into "toggle the
+Dwerty/Qwerty half" (0<->1, 2<->3); `&to` persists the default layer, so the
+choice survives reboot.
 
 The stock keymap is read from git (HEAD) in the fork workspace so it is always
 pristine, even after build.sh has copied our keymap over the working file.
@@ -35,7 +35,8 @@ REL = "app/boards/shields/keychron_v6_ultra_ansi/keychron_v6_ultra_ansi.keymap"
 OUT = ULTRA / "config" / "keychron_v6_ultra_ansi.keymap"
 
 # (physical Qwerty token) -> (Dvorak token, Qwerty token). A and M are identical
-# between the layouts, so they stay plain &kp and get no morph.
+# between the layouts, so they stay plain &kp and get no morph. This MUST stay
+# identical to max's qwerty_shortcut_map[] (see max/.../keymap.c).
 DQ = {
     'Q': ('SQT', 'Q'), 'W': ('COMMA', 'W'), 'E': ('DOT', 'E'), 'R': ('P', 'R'),
     'T': ('Y', 'T'), 'Y': ('F', 'Y'), 'U': ('G', 'U'), 'I': ('C', 'I'),
@@ -66,85 +67,51 @@ def extract_bindings(block_name, text):
     return text[lt + 1:gt]
 
 
-def strip_comments(s):
-    s = re.sub(r'/\*.*?\*/', ' ', s, flags=re.S)
-    return re.sub(r'//[^\n]*', ' ', s)
+def morph(base):
+    """Replace each differing &kp with its &dq_* mod-morph (Dvorak typing)."""
+    tokens = sorted(DQ.keys(), key=len, reverse=True)
+    pat = re.compile(r'&kp\s+(' + '|'.join(tokens) + r')\b')
+    return pat.sub(lambda m: '&' + bname(m.group(1)), base)
 
 
-def parse_bindings(text):
-    """Split a devicetree bindings body into individual behaviour invocations.
-
-    A new binding starts at every &-prefixed token; following non-& tokens are
-    that binding's parameters. Comments are stripped first so the positions of
-    two layers line up for a position-wise diff.
-    """
-    out, cur = [], None
-    for tok in strip_comments(text).split():
-        if tok.startswith('&'):
-            if cur is not None:
-                out.append(' '.join(cur))
-            cur = [tok]
-        elif cur is not None:
-            cur.append(tok)
-    if cur is not None:
-        out.append(' '.join(cur))
-    return out
+def split_cells(b):
+    """Split a bindings body into per-position cells (a cell is a &behaviour
+    plus its params), so a cell can be replaced by key position."""
+    cells, cur = [], None
+    for t in b.split():
+        if t.startswith('&'):
+            if cur:
+                cells.append(' '.join(cur))
+            cur = [t]
+        elif cur:
+            cur.append(t)
+    if cur:
+        cells.append(' '.join(cur))
+    return cells
 
 
-def relayer(s):
-    """Renumber stock layer references for the new scheme: the fn momentary
-    (&mo 1 -> &mo 4) and the Mac/Win slide switch (&mo 2 -> &mo 3, the WIN
-    overlay)."""
-    return s.replace('&mo 1', '&mo 4').replace('&mo 2', '&mo 3')
-
-
-def win_overlay(mac_base, win_base):
-    """Build the sparse Mac->Windows overlay (layer 3).
-
-    It is &trans at every position except where the stock Mac base and Win base
-    differ - the function row, the Mac/Win-specific special keys and the
-    bottom-row modifier order - where it takes the stock Win binding. The fn key
-    is forced &trans so the active typing layer's fn binding shows through; the
-    slide-switch position is already &none in the stock Win base.
-    """
-    mac = parse_bindings(mac_base)
-    win = parse_bindings(win_base)
-    assert len(mac) == len(win), (len(mac), len(win))
-    fn_pos = mac.index('&mo 1')
-    cells = []
-    for i, (a, b) in enumerate(zip(mac, win)):
-        if i == fn_pos or a == b:
-            cells.append('&trans')
-        else:
-            cells.append(b)
-    lines = ['            ' + ' '.join(cells[i:i + 15])
-             for i in range(0, len(cells), 15)]
-    return '\n'.join(lines), sum(1 for c in cells if c != '&trans')
+def set_cell(b, pos, val):
+    cells = split_cells(b)
+    cells[pos] = val
+    return ' '.join(cells)
 
 
 def main():
     stock = read_stock()
-    base = extract_bindings('default_layer', stock)   # Mac base = Qwerty
-    macfn = extract_bindings('layer_one', stock)      # Mac fn
-    winbase = extract_bindings('layer_two', stock)    # Win base (mods/F-row swap)
+    macbase = extract_bindings('default_layer', stock)  # Mac base = Qwerty
+    macfn = extract_bindings('layer_one', stock)        # Mac fn
+    winbase = extract_bindings('layer_two', stock)      # Win base (mods/F-row)
 
-    tokens = sorted(DQ.keys(), key=len, reverse=True)
-    pat = re.compile(r'&kp\s+(' + '|'.join(tokens) + r')\b')
-
-    dwerty = relayer(pat.sub(lambda m: '&' + bname(m.group(1)), base))
-    qwerty = relayer(base)
-    dvorak = relayer(pat.sub(lambda m: '&kp ' + DQ[m.group(1)][0], base))
-
-    # FN: stock Mac fn + first three &trans become the layout selector.
-    parts = macfn.split('&trans')
-    repls = ['&to 0', '&to 1', '&to 2']
-    fn = parts[0]
-    for k in range(1, len(parts)):
-        fn += (repls[k - 1] if k - 1 < len(repls) else '&trans') + parts[k]
-    fn = relayer(fn)
-
-    # WIN: sparse Mac->Windows overlay held by the Mac/Win slide switch.
-    win, win_keys = win_overlay(base, winbase)
+    # fn -> &mo 4 on every base. The Mac slide switch (&mo 2) keeps the OS half's
+    # Dwerty/Qwerty choice: it points at WIN_QWERTY (2) from MAC_QWERTY and
+    # WIN_DWERTY (3) from MAC_DWERTY. Win bases keep stock &none.
+    mac_qwerty = macbase.replace('&mo 1', '&mo 4')
+    mac_dwerty = morph(macbase).replace('&mo 1', '&mo 4').replace('&mo 2', '&mo 3')
+    win_qwerty = winbase.replace('&mo 3', '&mo 4')
+    win_dwerty = morph(winbase).replace('&mo 3', '&mo 4')
+    # Fn+Z: Z (position 80) on the FN layer becomes &to 0xFF, a sentinel our
+    # keymap.c patch turns into a persisted Dwerty<->Qwerty half-toggle.
+    fn = set_cell(re.sub(r'//[^\n]*', '', macfn).replace('&mo 1', '&mo 4'), 80, '&to 0xFF')
 
     dq_defs = []
     for q, (dv, qw) in DQ.items():
@@ -176,52 +143,50 @@ def main():
     new_keymap = f"""keymap {{
         compatible = "zmk,keymap";
 
-        // Layer 0: DWERTY  - Dvorak keys + Qwerty-position shortcut morphs
-        dwerty_layer {{
-            bindings = <{dwerty}>;
+        // Layer 0: MAC_QWERTY - stock Mac base
+        mac_qwerty {{
+            bindings = <{mac_qwerty}>;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         }};
 
-        // Layer 1: QWERTY  - plain Qwerty
-        qwerty_layer {{
-            bindings = <{qwerty}>;
+        // Layer 1: MAC_DWERTY - Mac Dvorak + Qwerty-position shortcut morphs
+        mac_dwerty {{
+            bindings = <{mac_dwerty}>;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         }};
 
-        // Layer 2: DVORAK  - plain Dvorak, no shortcut morphs
-        dvorak_layer {{
-            bindings = <{dvorak}>;
+        // Layer 2: WIN_QWERTY - stock Win base
+        win_qwerty {{
+            bindings = <{win_qwerty}>;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         }};
 
-        // Layer 3: WIN  - Mac->Windows overlay held by the Mac/Win slide switch.
-        // Transparent except the function row, the Mac/Win special keys and the
-        // bottom-row modifier order, so the active typing layer (including the
-        // DWERTY morphs) shows through. Slide to "Win" holds &mo 3.
-        win_layer {{
-            bindings = <
-{win}
-            >;
+        // Layer 3: WIN_DWERTY - Win Dvorak + Qwerty-position shortcut morphs
+        win_dwerty {{
+            bindings = <{win_dwerty}>;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         }};
 
-        // Layer 4: FN  - RGB/BT/media (from stock) + layout selector (&to 0/1/2)
+        // Layer 4: FN - stock RGB/BT/media overlay, shared by both OS halves
         fn_layer {{
             bindings = <{fn}>;
             sensor-bindings = <&rgb_encoder>;
         }};
     }};"""
 
-    # combo_a is the stock "fn+j+z" combo, gated on the old fn layers <1 3>.
-    # In the new scheme fn is layer 4, so point it there (this also stops it
-    # mis-firing on QWERTY, which is layer 1 now).
-    head = stock[:start].replace('layers =< 1 3>;', 'layers = <4>;', 1)
+    # combo_a was stock "fn+j+z" on layers <1 3>. Repurpose it as our Fn+Z
+    # Dwerty<->Qwerty toggle: Z (pos 80) on the FN layer (4), &to 0xFF, which
+    # our keymap.c patch turns into a persisted half-toggle (0<->1, 2<->3).
+    # Leave the stock combo intact but re-point it to the FN layer so it can't
+    # misfire on a base layer; Fn+Z lives on the FN layer (above) instead.
+    head = stock[:start]
+    head = head.replace('layers =< 1 3>;', 'layers = <4>;', 1)
 
     out = head + "\n" + dq_block + "\n    " + new_keymap + stock[end:]
     OUT.write_text(out)
     print(f"wrote {OUT} ({len(out)} bytes); {len(DQ)} morphs, "
-          f"{len(re.findall(r'&dq_', dwerty))} dq refs on DWERTY, "
-          f"WIN overlay has {win_keys} non-transparent keys")
+          f"{len(re.findall(r'&dq_', mac_dwerty))} dq refs on MAC_DWERTY, "
+          f"{len(re.findall(r'&dq_', win_dwerty))} dq refs on WIN_DWERTY")
 
 
 if __name__ == "__main__":

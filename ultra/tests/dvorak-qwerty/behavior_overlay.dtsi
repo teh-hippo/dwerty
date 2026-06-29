@@ -1,17 +1,17 @@
 /* Regression guard for the Mac/Win slide switch.
  *
- * The slide switch is a continuously-held GPIO that turns on the WIN overlay
- * (layer 1 here). That overlay must be TRANSPARENT at typing positions so the
- * Dvorak-Qwerty morph on the layer below still fires - it only swaps the
- * bottom-row modifier order. The original bug pointed the switch at a
- * non-transparent DVORAK layer, which silently disabled the morph whenever the
- * slider was on "Win".
+ * The slide switch is a continuously-held GPIO that holds the matching Win
+ * base (layer 1 here). Mirroring max/, that Win base is a FULL Dwerty base
+ * with its own &dq_* morphs - not a transparent overlay - so typing the
+ * Dvorak-Qwerty morph still fires on either OS half, and only the bottom-row
+ * modifier order (Mac LALT <-> Win LGUI) changes. The original bug pointed the
+ * switch at a non-transparent DVORAK layer, which silently disabled the morph.
  *
  * Matrix:
  *   (0,0) dq_j   - morph: Dvorak J normally, Qwerty C under Ctrl/Alt/GUI
  *   (0,1) LCTRL
- *   (1,0) mo 1   - the "slide switch": momentarily turns on the WIN overlay
- *   (1,1) LALT (base) / LGUI (overlay) - the Mac<->Win modifier swap
+ *   (1,0) mo 1   - the "slide switch": momentarily holds the Win Dwerty base
+ *   (1,1) LALT (Mac) / LGUI (Win) - the Mac<->Win modifier swap
  */
 / {
     behaviors {
@@ -26,16 +26,16 @@
 
     keymap {
         compatible = "zmk,keymap";
-        base_layer {
+        mac_dwerty {
             bindings = <
                 &dq_j      &kp LCTRL
                 &mo 1      &kp LALT
             >;
         };
-        win_overlay {
-            /* transparent at typing positions; only the modifier is swapped */
+        win_dwerty {
+            /* full Dwerty base: same morph, only the modifier order is Win */
             bindings = <
-                &trans     &trans
+                &dq_j      &kp LCTRL
                 &trans     &kp LGUI
             >;
         };

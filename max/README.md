@@ -8,26 +8,28 @@ Based on Keychron's QMK fork ([`wireless_playground`](https://github.com/Keychro
 
 ## Layers
 
+The Mac/Win slide switch chooses the OS half; the saved Dwerty/Qwerty choice picks which base shows in that half.
+
 | Layer | Index | Description |
 |-------|-------|-------------|
-| DWERTY | 0 | Dvorak keys + Qwerty shortcut interception |
-| QWERTY | 1 | Standard Qwerty |
-| DVORAK | 2 | Pure Dvorak (no shortcut interception) |
-| FN | 3 | Fn-held overlay |
+| MAC_QWERTY | 0 | Mac Qwerty base (stock) |
+| MAC_DWERTY | 1 | Mac Dvorak keys + Qwerty shortcut interception |
+| WIN_QWERTY | 2 | Win Qwerty base (stock) |
+| WIN_DWERTY | 3 | Win Dvorak keys + Qwerty shortcut interception |
+| FN | 4 | Fn-held overlay |
 
-DWERTY and DVORAK have identical key layouts. The only difference: when you hold Ctrl/Alt/Win on DWERTY, the firmware intercepts and sends the Qwerty-equivalent shortcut. On DVORAK, no interception occurs.
+The Dwerty layers type Dvorak; when you hold Ctrl/Alt/Win, the firmware intercepts and sends the Qwerty-position shortcut. The Qwerty layers are the stock Keychron bases with no remapping.
 
-The selected mode is persisted in EEPROM and survives reboots.
+The Dwerty/Qwerty choice is persisted in EEPROM and survives reboots and Mac/Win switches.
 
 ## Layout Selector
 
-Hold **Fn**, press **Z** to enter the layout selector. A circular animation on the Z, A, S, X keys shows the current mode. Each press of Z cycles to the next mode. Release Fn to confirm.
+Hold **Fn**, press **Z** to toggle between Dwerty and Qwerty within the current OS half. A circular animation on the Z, A, S, X keys shows the current mode. Release Fn to confirm.
 
 | Mode | Tab LED | Selector colour |
 |------|---------|-----------------|
 | Dwerty | 🔴 Red | Red |
 | Qwerty | 🔵 Blue | Blue |
-| Dvorak | 🟢 Green | Green |
 
 ## Fn Layer
 
@@ -143,4 +145,4 @@ The firmware supports both [usevia.app](https://usevia.app) and the [Keychron La
 | Per-key RGB / Mixed RGB | ✅ Enabled (build-time patch) |
 | Firmware version | ✅ Reports 1.1.2 (DEVICE_VER override in config.h) |
 | Debounce | ✅ Adjustable in the Launcher ("bounce time"); defaults to `sym_eager_pk` @ 50ms |
-| DIP switch (Mac/Win toggle) | ⚠️ Physical switch is ignored — firmware always applies saved layout mode |
+| DIP switch (Mac/Win toggle) | ✅ Honoured — selects the Mac or Win base; saved Dwerty/Qwerty choice applies within the half |

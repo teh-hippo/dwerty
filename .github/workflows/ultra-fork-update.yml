@@ -1,0 +1,58 @@
+name: Ultra Fork Update Check
+
+# Watches Keychron's ZMK fork branch. When it moves past our pinned commit, this
+# bumps the pin, runs the behaviour tests + firmware build, and opens a PR if
+# green (a Copilot agent can then finish review). Manual run supported.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Resolve pinned vs upstream commit
+        id: rev
+        run: |
+          set -euo pipefail
+          PINNED=$(grep -oP 'revision:\s*\K[0-9a-f]{40}' ultra/config/west.yml | head -1)
+          UPSTREAM=$(git ls-remote https://github.com/Keychron/zmk.git rtl8762g | cut -f1)
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          if [ "$PINNED" = "$UPSTREAM" ]; then echo "changed=false"; else echo "changed=true"; fi >> "$GITHUB_OUTPUT"
+
+      - name: Bump pin
+        if: steps.rev.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          sed -i "s/${{ steps.rev.outputs.pinned }}/${{ steps.rev.outputs.upstream }}/g" ultra/config/west.yml ultra/scripts/build.sh
+
+      - name: Test + build on new pin
+        if: steps.rev.outputs.changed == 'true'
+        working-directory: ultra
+        run: |
+          ./scripts/test.sh
+          rm -rf .cache/upstream
+          ./scripts/build.sh
+
+      - name: Open PR
+        if: steps.rev.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: chore/ultra-fork-bump
+          title: "chore(ultra): bump Keychron fork to ${{ steps.rev.outputs.upstream }}"
+          commit-message: "chore(ultra): bump Keychron fork pin; patches + build verified green"
+          body: |
+            Keychron's `rtl8762g` fork moved. Pin bumped from `${{ steps.rev.outputs.pinned }}` to `${{ steps.rev.outputs.upstream }}`; tests + build passed. Review patches/ still apply cleanly.
+          labels: dependencies
+          add-paths: |
+            ultra/config/west.yml
+            ultra/scripts/build.sh

@@ -19,6 +19,10 @@ ZMK="${WS}/zmk"
 IMAGE="docker.io/zmkfirmware/zmk-build-arm:3.5"
 ZMK_REPO="https://github.com/Keychron/zmk.git"
 ZMK_BRANCH="rtl8762g"
+# Pin to a known-good fork commit so builds are reproducible. We clone the
+# branch (cheap, shallow) then check this SHA out; if it is not in the shallow
+# history we fetch it explicitly.
+ZMK_SHA="101a23c678495ff2a08a86d59c7a7869350d39a6"
 BOARD="keychron"
 SHIELD="keychron_v6_ultra_ansi"
 SHIELD_DIR_REL="app/boards/shields/${SHIELD}"
@@ -51,11 +55,27 @@ run() {  # run a command inside the build container, mounting the workspace
 
 # 1. Initialise the west workspace (clone fork + pull Zephyr) once.
 if [[ ! -d "${ZMK}/.git" ]]; then
-  echo "==> Cloning ${ZMK_REPO} (${ZMK_BRANCH}) and running west update (slow, one-time)"
-  git clone --depth 1 -b "${ZMK_BRANCH}" "${ZMK_REPO}" "${ZMK}"
+  echo "==> Cloning ${ZMK_REPO} (${ZMK_BRANCH} @ ${ZMK_SHA:0:7}) and running west update (slow, one-time)"
+  git clone --depth 50 -b "${ZMK_BRANCH}" "${ZMK_REPO}" "${ZMK}"
+  git -C "${ZMK}" fetch --depth 1 origin "${ZMK_SHA}" 2>/dev/null || true
+  git -C "${ZMK}" checkout -q "${ZMK_SHA}"
   run 'git config --global --add safe.directory "*"
        cd /ws/zmk && west init -l app && west update && west zephyr-export'
 fi
+
+# 1b. Ensure we are on the pinned SHA, then patch ZMK core (idempotent: only
+#     apply if not yet applied; tolerate a re-run after the patch is present).
+echo "==> Pinning ZMK to ${ZMK_SHA:0:7} and applying core patches"
+git -C "${ZMK}" fetch --depth 1 origin "${ZMK_SHA}" 2>/dev/null || true
+git -C "${ZMK}" checkout -q "${ZMK_SHA}"
+for p in "${ULTRA_DIR}"/patches/*.patch; do
+  [[ -e "${p}" ]] || continue
+  if git -C "${ZMK}" apply --reverse --check "${p}" 2>/dev/null; then
+    echo "    already applied: $(basename "${p}")"
+  else
+    git -C "${ZMK}" apply "${p}" && echo "    applied: $(basename "${p}")"
+  fi
+done
 
 # 2. Apply our keymap + conf overrides onto a clean stock shield.
 echo "==> Applying DWERTY keymap and conf overrides"

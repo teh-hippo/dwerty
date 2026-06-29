@@ -440,8 +440,24 @@
     keymap {
         compatible = "zmk,keymap";
 
-        // Layer 0: DWERTY  - Dvorak keys + Qwerty-position shortcut morphs
-        dwerty_layer {
+        // Layer 0: MAC_QWERTY - stock Mac base
+        mac_qwerty {
+            bindings = <
+          //ESC         //f1                    //f2                //f3                                    //f4                //f5                //f6            //f7            //f8                //f9        //f10       //f11               //f12               //Mute
+        &kp ESC     &kp C_BRIGHTNESS_DEC    &kp C_BRIGHTNESS_INC    &kp C_AC_DESKTOP_SHOW_ALL_WINDOWS   &kp  C_AC_MAC_LAUNCH    &rgb_ug RGB_BRD     &rgb_ug RGB_BRI &kp C_PREVIOUS  &kp C_PLAY_PAUSE    &kp C_NEXT  &kp C_MUTE  &kp C_VOLUME_DOWN   &kp C_VOLUME_UP     &kp C_MUTE         &uc LG(LS(N4))       &siri               &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
+        &kp GRAVE   &kp N1                  &kp N2                  &kp N3                              &kp N4                  &kp N5              &kp N6          &kp N7          &kp N8              &kp N9      &kp N0      &kp MINUS           &kp EQUAL           &kp BSPC           &kp INS              &kp HOME            &kp PGUP                &kp KP_NUMLOCK   &kp KP_SLASH     &kp KP_MULTIPLY     &kp KP_MINUS
+        &kp TAB     &kp Q                   &kp W                   &kp E                               &kp R                   &kp T               &kp Y           &kp U           &kp I               &kp O       &kp P       &kp LBKT            &kp RBKT            &kp BSLH           &kp DEL              &kp END             &kp PGDN                &kp KP_N7        &kp KP_N8        &kp KP_N9
+        &kp CLCK    &kp A                   &kp S                   &kp D                               &kp F                   &kp G               &kp H           &kp J           &kp K               &kp L       &kp SEMI    &kp SQT             &kp RET                                                                                                 &kp KP_N4        &kp KP_N5        &kp KP_N6           &kp KP_PLUS
+        &kp LSHFT                           &kp Z                   &kp X                               &kp C                   &kp V               &kp B           &kp N           &kp M               &kp COMMA   &kp DOT     &kp FSLH            &kp RSHFT                                                   &kp UP                                      &kp KP_N1        &kp KP_N2        &kp KP_N3
+        &kp LCTRL   &uc LALT                &uc LCMD                                                                            &kp SPACE                                                                           &uc RCMD    &uc RALT            &mo 4               &kp RCTRL          &kp LEFT             &kp DOWN            &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
+        //keychron control
+        &mo 2       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
+            >;
+            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
+        };
+
+        // Layer 1: MAC_DWERTY - Mac Dvorak + Qwerty-position shortcut morphs
+        mac_dwerty {
             bindings = <
           //ESC         //f1                    //f2                //f3                                    //f4                //f5                //f6            //f7            //f8                //f9        //f10       //f11               //f12               //Mute
         &kp ESC     &kp C_BRIGHTNESS_DEC    &kp C_BRIGHTNESS_INC    &kp C_AC_DESKTOP_SHOW_ALL_WINDOWS   &kp  C_AC_MAC_LAUNCH    &rgb_ug RGB_BRD     &rgb_ug RGB_BRI &kp C_PREVIOUS  &kp C_PLAY_PAUSE    &kp C_NEXT  &kp C_MUTE  &kp C_VOLUME_DOWN   &kp C_VOLUME_UP     &kp C_MUTE         &uc LG(LS(N4))       &siri               &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
@@ -456,68 +472,39 @@
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
 
-        // Layer 1: QWERTY  - plain Qwerty
-        qwerty_layer {
+        // Layer 2: WIN_QWERTY - stock Win base
+        win_qwerty {
             bindings = <
-          //ESC         //f1                    //f2                //f3                                    //f4                //f5                //f6            //f7            //f8                //f9        //f10       //f11               //f12               //Mute
-        &kp ESC     &kp C_BRIGHTNESS_DEC    &kp C_BRIGHTNESS_INC    &kp C_AC_DESKTOP_SHOW_ALL_WINDOWS   &kp  C_AC_MAC_LAUNCH    &rgb_ug RGB_BRD     &rgb_ug RGB_BRI &kp C_PREVIOUS  &kp C_PLAY_PAUSE    &kp C_NEXT  &kp C_MUTE  &kp C_VOLUME_DOWN   &kp C_VOLUME_UP     &kp C_MUTE         &uc LG(LS(N4))       &siri               &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
-        &kp GRAVE   &kp N1                  &kp N2                  &kp N3                              &kp N4                  &kp N5              &kp N6          &kp N7          &kp N8              &kp N9      &kp N0      &kp MINUS           &kp EQUAL           &kp BSPC           &kp INS              &kp HOME            &kp PGUP                &kp KP_NUMLOCK   &kp KP_SLASH     &kp KP_MULTIPLY     &kp KP_MINUS
-        &kp TAB     &kp Q                   &kp W                   &kp E                               &kp R                   &kp T               &kp Y           &kp U           &kp I               &kp O       &kp P       &kp LBKT            &kp RBKT            &kp BSLH           &kp DEL              &kp END             &kp PGDN                &kp KP_N7        &kp KP_N8        &kp KP_N9
-        &kp CLCK    &kp A                   &kp S                   &kp D                               &kp F                   &kp G               &kp H           &kp J           &kp K               &kp L       &kp SEMI    &kp SQT             &kp RET                                                                                                 &kp KP_N4        &kp KP_N5        &kp KP_N6           &kp KP_PLUS
-        &kp LSHFT                           &kp Z                   &kp X                               &kp C                   &kp V               &kp B           &kp N           &kp M               &kp COMMA   &kp DOT     &kp FSLH            &kp RSHFT                                                   &kp UP                                      &kp KP_N1        &kp KP_N2        &kp KP_N3
-        &kp LCTRL   &uc LALT                &uc LCMD                                                                            &kp SPACE                                                                           &uc RCMD    &uc RALT            &mo 4               &kp RCTRL          &kp LEFT             &kp DOWN            &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
+        &kp ESC     &kp F1                 &kp F2                   &kp F3                              &kp F4                  &kp F5              &kp F6          &kp F7          &kp F8              &kp F9       &kp F10    &kp F11              &kp F12             &kp C_MUTE      &kp PRSC   &uc LG(C)     &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
+        &kp GRAVE   &kp N1                 &kp N2                   &kp N3                              &kp N4                  &kp N5              &kp N6          &kp N7          &kp N8              &kp N9       &kp N0     &kp MINUS            &kp EQUAL           &kp BSPC        &kp INS    &kp HOME      &kp PGUP                &kp KP_NUMLOCK   &kp KP_SLASH     &kp KP_MULTIPLY     &kp KP_MINUS
+        &kp TAB     &kp Q                  &kp W                    &kp E                               &kp R                   &kp T               &kp Y           &kp U           &kp I               &kp O        &kp P      &kp LBKT             &kp RBKT            &kp BSLH        &kp DEL    &kp END       &kp PGDN                &kp KP_N7        &kp KP_N8        &kp KP_N9
+        &kp CLCK    &kp A                  &kp S                    &kp D                               &kp F                   &kp G               &kp H           &kp J           &kp K               &kp L        &kp SEMI   &kp SQT              &kp RET                                                                              &kp KP_N4        &kp KP_N5        &kp KP_N6           &kp KP_PLUS
+        &kp LSHFT                          &kp Z                    &kp X                               &kp C                   &kp V               &kp B           &kp N           &kp M               &kp COMMA    &kp DOT    &kp FSLH             &kp RSHFT                                      &kp UP                                &kp KP_N1        &kp KP_N2        &kp KP_N3
+        &kp LCTRL   &kp LGUI               &kp LALT                                                                             &kp SPACE                                                                            &kp RALT   &kp RGUI             &mo 4               &kp RCTRL       &kp LEFT   &kp DOWN      &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
         //keychron control
-        &mo 3       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
-            >;
-            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
-        };
-
-        // Layer 2: DVORAK  - plain Dvorak, no shortcut morphs
-        dvorak_layer {
-            bindings = <
-          //ESC         //f1                    //f2                //f3                                    //f4                //f5                //f6            //f7            //f8                //f9        //f10       //f11               //f12               //Mute
-        &kp ESC     &kp C_BRIGHTNESS_DEC    &kp C_BRIGHTNESS_INC    &kp C_AC_DESKTOP_SHOW_ALL_WINDOWS   &kp  C_AC_MAC_LAUNCH    &rgb_ug RGB_BRD     &rgb_ug RGB_BRI &kp C_PREVIOUS  &kp C_PLAY_PAUSE    &kp C_NEXT  &kp C_MUTE  &kp C_VOLUME_DOWN   &kp C_VOLUME_UP     &kp C_MUTE         &uc LG(LS(N4))       &siri               &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
-        &kp GRAVE   &kp N1                  &kp N2                  &kp N3                              &kp N4                  &kp N5              &kp N6          &kp N7          &kp N8              &kp N9      &kp N0      &kp LBKT           &kp RBKT           &kp BSPC           &kp INS              &kp HOME            &kp PGUP                &kp KP_NUMLOCK   &kp KP_SLASH     &kp KP_MULTIPLY     &kp KP_MINUS
-        &kp TAB     &kp SQT                   &kp COMMA                   &kp DOT                               &kp P                   &kp Y               &kp F           &kp G           &kp C               &kp R       &kp L       &kp FSLH            &kp EQUAL            &kp BSLH           &kp DEL              &kp END             &kp PGDN                &kp KP_N7        &kp KP_N8        &kp KP_N9
-        &kp CLCK    &kp A                   &kp O                   &kp E                               &kp U                   &kp I               &kp D           &kp H           &kp T               &kp N       &kp S    &kp MINUS             &kp RET                                                                                                 &kp KP_N4        &kp KP_N5        &kp KP_N6           &kp KP_PLUS
-        &kp LSHFT                           &kp SEMI                   &kp Q                               &kp J                   &kp K               &kp X           &kp B           &kp M               &kp W   &kp V     &kp Z            &kp RSHFT                                                   &kp UP                                      &kp KP_N1        &kp KP_N2        &kp KP_N3
-        &kp LCTRL   &uc LALT                &uc LCMD                                                                            &kp SPACE                                                                           &uc RCMD    &uc RALT            &mo 4               &kp RCTRL          &kp LEFT             &kp DOWN            &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
-        //keychron control
-        &mo 3       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
-            >;
-            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
-        };
-
-        // Layer 3: WIN  - Mac->Windows overlay held by the Mac/Win slide switch.
-        // Transparent except the function row, the Mac/Win special keys and the
-        // bottom-row modifier order, so the active typing layer (including the
-        // DWERTY morphs) shows through. Slide to "Win" holds &mo 3.
-        win_layer {
-            bindings = <
-            &trans &kp F1 &kp F2 &kp F3 &kp F4 &kp F5 &kp F6 &kp F7 &kp F8 &kp F9 &kp F10 &kp F11 &kp F12 &trans &kp PRSC
-            &uc LG(C) &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-            &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-            &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-            &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-            &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-            &trans &trans &trans &trans &trans &trans &kp LGUI &kp LALT &trans &kp RALT &kp RGUI &trans &trans &trans &trans
-            &trans &trans &trans &trans &none &trans &trans &trans &trans
-            >;
-            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
-        };
-
-        // Layer 4: FN  - RGB/BT/media (from stock) + layout selector (&to 0/1/2)
-        fn_layer {
-            bindings = <
-        &to 0              &kp F1                  &kp F2                  &kp F3                              &kp F4                  &kp F5              &kp F6          &kp F7          &kp F8              &kp F9      &kp F10     &kp F11             &kp F12             &rgb_ug RGB_TOG             &to 1          &to 2       &rgb_ug RGB_TOG            &trans    &trans          &trans       &trans
-        &trans              &bt_pair_0 0 0          &bt_pair_1 0 0          &bt_pair_2 0 0                      &ppt_pair_0 0 0         &trans              &trans          &trans          &trans              &trans      &trans      &trans              &trans              &trans                      &trans          &trans       &trans                     &trans    &trans          &trans       &trans
-        &rgb_ug RGB_TOG     &rgb_ug RGB_EFF         &rgb_ug RGB_BRI         &rgb_ug RGB_HUI                     &rgb_ug RGB_SAI         &rgb_ug RGB_SPI     &trans          &trans          &trans              &trans      &trans      &trans              &trans              &trans                      &trans          &trans       &trans                     &trans    &trans          &trans
-        &trans              &rgb_ug RGB_EFR         &rgb_ug RGB_BRD         &rgb_ug RGB_HUD                     &rgb_ug RGB_SAD         &rgb_ug RGB_SPD     &trans          &trans          &trans              &trans      &trans      &trans              &trans                                                                                                  &trans    &trans          &trans       &trans
-        &trans                                      &trans                  &trans                              &trans                  &trans              &kc BATINFO     &trans          &trans              &trans      &trans      &trans              &trans                                                          &trans                                  &trans    &trans          &trans
-        &trans              &trans                  &trans                                                                              &trans                                                                              &trans      &trans              &trans              &trans                      &trans          &trans       &trans                     &trans                    &trans       &trans
-        //
-        &none               &trans                  &trans                   &trans        &trans
+        &none       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
         >;
+            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
+        };
+
+        // Layer 3: WIN_DWERTY - Win Dvorak + Qwerty-position shortcut morphs
+        win_dwerty {
+            bindings = <
+        &kp ESC     &kp F1                 &kp F2                   &kp F3                              &kp F4                  &kp F5              &kp F6          &kp F7          &kp F8              &kp F9       &kp F10    &kp F11              &kp F12             &kp C_MUTE      &kp PRSC   &uc LG(C)     &rgb_ug RGB_EFF         &kp F13          &kp F14          &kp F15             &kp F16
+        &kp GRAVE   &kp N1                 &kp N2                   &kp N3                              &kp N4                  &kp N5              &kp N6          &kp N7          &kp N8              &kp N9       &kp N0     &dq_minus            &dq_equal           &kp BSPC        &kp INS    &kp HOME      &kp PGUP                &kp KP_NUMLOCK   &kp KP_SLASH     &kp KP_MULTIPLY     &kp KP_MINUS
+        &kp TAB     &dq_q                  &dq_w                    &dq_e                               &dq_r                   &dq_t               &dq_y           &dq_u           &dq_i               &dq_o        &dq_p      &dq_lbkt             &dq_rbkt            &kp BSLH        &kp DEL    &kp END       &kp PGDN                &kp KP_N7        &kp KP_N8        &kp KP_N9
+        &kp CLCK    &kp A                  &dq_s                    &dq_d                               &dq_f                   &dq_g               &dq_h           &dq_j           &dq_k               &dq_l        &dq_semi   &dq_sqt              &kp RET                                                                              &kp KP_N4        &kp KP_N5        &kp KP_N6           &kp KP_PLUS
+        &kp LSHFT                          &dq_z                    &dq_x                               &dq_c                   &dq_v               &dq_b           &dq_n           &kp M               &dq_comma    &dq_dot    &dq_fslh             &kp RSHFT                                      &kp UP                                &kp KP_N1        &kp KP_N2        &kp KP_N3
+        &kp LCTRL   &kp LGUI               &kp LALT                                                                             &kp SPACE                                                                            &kp RALT   &kp RGUI             &mo 4               &kp RCTRL       &kp LEFT   &kp DOWN      &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
+        //keychron control
+        &none       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
+        >;
+            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
+        };
+
+        // Layer 4: FN - stock RGB/BT/media overlay, shared by both OS halves
+        fn_layer {
+            bindings = <&trans &kp F1 &kp F2 &kp F3 &kp F4 &kp F5 &kp F6 &kp F7 &kp F8 &kp F9 &kp F10 &kp F11 &kp F12 &rgb_ug RGB_TOG &trans &trans &rgb_ug RGB_TOG &trans &trans &trans &trans &trans &bt_pair_0 0 0 &bt_pair_1 0 0 &bt_pair_2 0 0 &ppt_pair_0 0 0 &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &rgb_ug RGB_TOG &rgb_ug RGB_EFF &rgb_ug RGB_BRI &rgb_ug RGB_HUI &rgb_ug RGB_SAI &rgb_ug RGB_SPI &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &rgb_ug RGB_EFR &rgb_ug RGB_BRD &rgb_ug RGB_HUD &rgb_ug RGB_SAD &rgb_ug RGB_SPD &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &to 0xFF &trans &trans &trans &kc BATINFO &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &none &trans &trans &trans &trans>;
             sensor-bindings = <&rgb_encoder>;
         };
     };

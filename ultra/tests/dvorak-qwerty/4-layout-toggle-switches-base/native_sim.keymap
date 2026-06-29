@@ -1,0 +1,39 @@
+#include <dt-bindings/zmk/keys.h>
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+
+/* Proof: the Fn+Z layout selector (&to) switches the base layer, so the same
+ * physical key types Dvorak on the DWERTY half and Qwerty on the QWERTY half.
+ * (The fork's &to 0xFF half-toggle is fork-only; here we use plain &to to prove
+ * the selector mechanism + layer ordering on upstream native_sim.) */
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        dwerty_layer {
+            bindings = <
+                &kp J     &to 1
+                &kp LCTRL &to 0
+            >;
+        };
+        qwerty_layer {
+            bindings = <
+                &kp C     &to 1
+                &kp LCTRL &to 0
+            >;
+        };
+    };
+};
+
+&kscan {
+    events = <
+        /* DWERTY base: tap -> Dvorak J (0x0D) */
+        ZMK_MOCK_PRESS(0,0,10)
+        ZMK_MOCK_RELEASE(0,0,10)
+        /* Fn+Z selector (&to 1) -> QWERTY base */
+        ZMK_MOCK_PRESS(0,1,10)
+        ZMK_MOCK_RELEASE(0,1,10)
+        /* same key now types Qwerty C (0x06) */
+        ZMK_MOCK_PRESS(0,0,10)
+        ZMK_MOCK_RELEASE(0,0,10)
+    >;
+};

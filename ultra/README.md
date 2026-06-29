@@ -14,15 +14,17 @@ The V6 Ultra runs ZMK on a Realtek RTL8762G. Instead of QMK's runtime `process_r
 
 | Layer | Name | Description |
 |-------|------|-------------|
-| 0 | DWERTY | Dvorak keys + 33 `&dq_*` Qwerty-position morphs |
-| 1 | QWERTY | Plain Qwerty |
-| 2 | DVORAK | Plain Dvorak, no morphs |
-| 3 | WIN | Mac→Windows overlay held by the Mac/Win slide switch (see below) |
-| 4 | FN | Stock RGB/Bluetooth/media overlay + `&to 0/1/2` layout selector |
+| 0 | MAC_QWERTY | Stock Mac base (Qwerty) |
+| 1 | MAC_DWERTY | Mac Dvorak + 33 `&dq_*` Qwerty-position morphs |
+| 2 | WIN_QWERTY | Stock Win base (Qwerty) |
+| 3 | WIN_DWERTY | Win Dvorak + 33 `&dq_*` Qwerty-position morphs |
+| 4 | FN | Stock RGB/Bluetooth/media overlay, shared by both halves |
 
-The physical Mac/Win slide switch is a continuously-held GPIO that turns on layer 3, a sparse overlay that is transparent everywhere except the function row, the two Mac/Win special keys and the bottom-row modifier order. Sliding to "Win" swaps those to Windows positions (F1–F12, PrintScreen, `LGUI`/`LALT`/`RALT`/`RGUI`) without changing the active typing layer, so the Dwerty morphs keep working on either side. FN (layer 4) sits above the overlay so the `&to 0/1/2` layout selectors are always reachable.
+This mirrors the QMK [`max/`](../max) firmware (which dropped pure Dvorak): the OS half (Mac/Win) and the Dvorak/Qwerty choice are the two base-layer pairs. The physical Mac/Win slide switch keeps its native Keychron behaviour: a continuously-held GPIO `&mo` that holds the matching Win base (Qwerty `&mo 2`, Dwerty `&mo 3`), so the F-row, the two Mac/Win special keys and the bottom-row modifier order swap to Windows while the Dwerty morphs keep working. The fn key is `&mo 4` on every base.
 
-The keymap is generated from the stock shield keymap by [`scripts/gen_keymap.py`](scripts/gen_keymap.py), which keeps Keychron's preamble (their custom behaviours, macros and combos) and rewrites only the layers. Regenerate with:
+**Fn+Z** toggles Dwerty<->Qwerty within the current OS half (`0<->1`, `2<->3`) and **persists across reboot**. It is a combo bound to `&to 0xFF`; our [`patches/0001-persist-default-layer.patch`](patches/0001-persist-default-layer.patch) makes `&to` set and save the default layer (and treats `0xFF` as "flip the low bit"), reloading it on boot — the ZMK mirror of QMK's `set_single_persistent_default_layer`.
+
+The keymap is generated from the stock shield keymap by [`scripts/gen_keymap.py`](scripts/gen_keymap.py), which keeps Keychron's preamble (their custom behaviours, macros and combos) and rewrites only the layers and the toggle combo. Regenerate with:
 
 ```bash
 python3 scripts/gen_keymap.py
@@ -32,7 +34,7 @@ python3 scripts/gen_keymap.py
 
 The build and the tests run against different ZMK trees, on purpose:
 
-- **Build** the real firmware on Keychron's fork (`Keychron/zmk@rtl8762g`), board `keychron`, shield `keychron_v6_ultra_ansi`, in the `zmk-build-arm:3.5` container.
+- **Build** the real firmware on Keychron's fork (`Keychron/zmk@rtl8762g`, pinned to commit `101a23c`), board `keychron`, shield `keychron_v6_ultra_ansi`, in the `zmk-build-arm:3.5` container. The build applies [`patches/0001-persist-default-layer.patch`](patches/0001-persist-default-layer.patch) onto the fork's `app/src/keymap.c` (idempotently) so the layout choice persists.
 - **Test** the behaviour on upstream `zmkfirmware/zmk` `native_sim` snapshot tests, in the `zmk-build-arm:4.1` container. The fork cannot host-test because its core headers pull in the Realtek HAL (`rtl_pinmux.h`). `&mod_morph` + `keep-mods` is identical between the fork and upstream, so behaviour proven on upstream holds for the real firmware.
 
 Both need [Podman](https://podman.io), or Docker if you set `DWERTY_CONTAINER_ENGINE=docker` (CI uses Docker). Each toolchain is set up once into `.cache/` (gitignored); the first run downloads Zephyr and is slow.
@@ -47,11 +49,15 @@ Both need [Podman](https://podman.io), or Docker if you set `DWERTY_CONTAINER_EN
 
 ### Tests
 
-`tests/dvorak-qwerty/` holds ZMK `native_sim` snapshot tests that assert the exact HID output:
+`tests/dvorak-qwerty/` holds ZMK `native_sim` snapshot tests that assert the exact HID output, plus a host-side parity check:
 
+- `parity_dq.py` — asserts the 33 Dvorak->Qwerty pairs match `max/` exactly, so the two firmwares never drift.
 - `1-dvorak-and-ctrl-qwerty` — tap types Dvorak; Ctrl+tap sends Ctrl+Qwerty; Shift+tap stays Dvorak.
 - `2-oneshot-ctrl-qwerty` — a sticky (`&sk`) Ctrl still morphs the next key to its Qwerty position.
-- `3-win-overlay-preserves-morph` — with the Mac/Win overlay held active, Ctrl+tap still sends Ctrl+Qwerty (the overlay is transparent at typing positions) while the modifier position swaps Mac→Windows.
+- `3-win-overlay-preserves-morph` — with the Mac/Win slide held to the Win Dwerty base, Ctrl+tap still sends Ctrl+Qwerty while the modifier position swaps Mac→Windows.
+- `4-layout-toggle-switches-base` — the layout selector (`&to`) flips the base so the same key types Dvorak then Qwerty, proving the layer ordering. (The fork-only `&to 0xFF` half-toggle/persistence rides on the build, not native_sim.)
+
+The persistent Fn+Z toggle lives in the `keymap.c` patch (settings on the fork), which `native_sim` cannot exercise; it is covered by the firmware build instead.
 
 ## The device
 

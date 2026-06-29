@@ -16,8 +16,8 @@
 
 #pragma once
 
-// 4 layers: DWERTY, QWERTY, DVORAK, FN
-#define DYNAMIC_KEYMAP_LAYER_COUNT 4
+// 5 layers: MAC_QWERTY, MAC_DWERTY, WIN_QWERTY, WIN_DWERTY, FN
+#define DYNAMIC_KEYMAP_LAYER_COUNT 5
 
 // Match official V6 Max firmware 1.1.2.
 // info_config.h is -included before keymap config.h (build_keyboard.mk

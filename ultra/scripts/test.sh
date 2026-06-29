@@ -33,6 +33,10 @@ fi
 if [[ "${1:-}" == "--clean" ]]; then rm -rf "${WS}"; shift; fi
 CASE="${1:-}"
 
+# Host-side parity: the Ultra DQ pairs must match the Max keymap exactly.
+echo "==> Checking Dvorak->Qwerty parity with max/"
+python3 "${ULTRA_DIR}/tests/parity_dq.py"
+
 mkdir -p "${WS}"
 
 run() {

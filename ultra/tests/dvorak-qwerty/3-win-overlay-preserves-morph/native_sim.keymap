@@ -5,10 +5,10 @@
 
 &kscan {
     events = <
-        /* 1) Hold the "slide switch" -> WIN overlay (layer 1) becomes active */
+        /* 1) Hold the "slide switch" -> WIN_DWERTY base (layer 1) becomes active */
         ZMK_MOCK_PRESS(1,0,10)
         /* 2) Overlay active: Ctrl + morph key -> still Qwerty Ctrl+C (0x01 + 0x06).
-         *    This is the regression guard: a transparent overlay must NOT block
+         *    This is the regression guard: a full Win base must NOT block
          *    the morph on the layer below. */
         ZMK_MOCK_PRESS(0,1,10)
         ZMK_MOCK_PRESS(0,0,10)
