@@ -1,0 +1,18 @@
+diff --git a/app/src/rgb/rgb_matrix_drivers.c b/app/src/rgb/rgb_matrix_drivers.c
+index ee9ab93..580935a 100644
+--- a/app/src/rgb/rgb_matrix_drivers.c
++++ b/app/src/rgb/rgb_matrix_drivers.c
+@@ -172,6 +172,13 @@ void zmk_rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
+ void zmk_rgb_matrix_update_pwm_buffers(void) {
+     if (rgb_matrix_device == NULL)
+         return;
++    // Dwerty: paint the whole board with the mode-flash colour just before the
++    // strip flush, so Fn+Z feedback overrides any effect (including 0x3f per-key).
++    uint8_t dr, dg, db;
++    extern bool dwerty_indicator_color(uint8_t *r, uint8_t *g, uint8_t *b);
++    if (dwerty_indicator_color(&dr, &dg, &db)) {
++        zmk_rgb_matrix_set_color_all(dr, dg, db);
++    }
+     rgb_enable_dlps = false;
+     led_strip_update_channels(rgb_matrix_device, NULL, 1);
+ }

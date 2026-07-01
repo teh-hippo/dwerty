@@ -1,8 +1,8 @@
 diff --git a/app/src/keymap.c b/app/src/keymap.c
-index 926a99b..4aa4c21 100644
+index 926a99b..9f8c1e1 100644
 --- a/app/src/keymap.c
 +++ b/app/src/keymap.c
-@@ -28,9 +28,65 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+@@ -28,9 +28,91 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
  #include <drivers/behavior.h>
  #include "./behaviors/behavior_sensor_rotate_common.h"
  
@@ -65,10 +65,36 @@ index 926a99b..4aa4c21 100644
 +}
 +#endif
 +
++// RGB feedback: Fn+Z flashes the whole board for DWERTY_FLASH_MS to confirm the
++// toggle and show the new mode (green = Dvorak, blue = Qwerty). The colour is
++// applied at the PWM flush (rgb_matrix_drivers.c), so it overrides any effect
++// (including the 0x3f per-key mode). Forcing the Keychron indicator render on
++// (zmk_rgb_led_indicatots_on) makes it show even when RGB is otherwise off, like
++// the battery indicator; a delayed work turns that force off after the flash.
++#define DWERTY_FLASH_MS 700
++static int64_t dwerty_flash_start = -DWERTY_FLASH_MS;
++bool dwerty_indicator_color(uint8_t *r, uint8_t *g, uint8_t *b) {
++    if (k_uptime_get() - dwerty_flash_start >= DWERTY_FLASH_MS) {
++        return false;
++    }
++    bool dvorak = _zmk_keymap_layer_default & 1;
++    *r = 0;
++    *g = dvorak ? 0x80 : 0;
++    *b = dvorak ? 0 : 0x80;
++    return true;
++}
++
++int zmk_rgb_led_indicatots_on(void);
++int zmk_rgb_led_indicatots_off(void);
++static struct k_work_delayable dwerty_flash_off_work;
++static void dwerty_flash_off_handler(struct k_work *work) {
++    zmk_rgb_led_indicatots_off();
++}
++
  #define DT_DRV_COMPAT zmk_keymap
  
  #if !DT_NODE_EXISTS(DT_DRV_INST(0))
-@@ -144,6 +200,17 @@ int zmk_keymap_layer_toggle(uint8_t layer) {
+@@ -144,6 +226,20 @@ int zmk_keymap_layer_toggle(uint8_t layer) {
  };
  
  int zmk_keymap_layer_to(uint8_t layer) {
@@ -77,6 +103,9 @@ index 926a99b..4aa4c21 100644
 +    // layers intact. Binding resolution re-bases typing immediately.
 +    if (layer == DWERTY_TOGGLE) {
 +        _zmk_keymap_layer_default ^= 1;
++        dwerty_flash_start = k_uptime_get();
++        zmk_rgb_led_indicatots_on();
++        k_work_reschedule(&dwerty_flash_off_work, K_MSEC(DWERTY_FLASH_MS));
 +#if IS_ENABLED(CONFIG_SETTINGS)
 +        k_work_reschedule(&dwerty_save_work, K_NO_WAIT);
 +#endif
@@ -86,7 +115,7 @@ index 926a99b..4aa4c21 100644
      for (int i = ZMK_KEYMAP_LAYERS_LEN - 1; i >= 0; i--) {
          zmk_keymap_layer_deactivate(i);
      }
-@@ -157,6 +224,39 @@ bool is_active_layer(uint8_t layer, zmk_keymap_layers_state_t layer_state) {
+@@ -157,6 +253,40 @@ bool is_active_layer(uint8_t layer, zmk_keymap_layers_state_t layer_state) {
      return (layer_state & BIT(layer)) == BIT(layer) || layer == _zmk_keymap_layer_default;
  }
  
@@ -118,6 +147,7 @@ index 926a99b..4aa4c21 100644
 +    settings_load_subtree_direct("dwerty", dwerty_settings_load_cb, NULL);
 +    k_work_init_delayable(&dwerty_save_work, dwerty_save_work_handler);
 +#endif
++    k_work_init_delayable(&dwerty_flash_off_work, dwerty_flash_off_handler);
 +    dwerty_apply_slide();  // OS half from the physical Mac/Win slide
 +    return 0;
 +}

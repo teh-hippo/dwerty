@@ -24,6 +24,8 @@ This mirrors the QMK [`max/`](../max) firmware (which dropped pure Dvorak): the 
 
 **Fn+Z** toggles Dwerty<->Qwerty within the current OS half (`0<->1`, `2<->3`) and **persists across reboot**. It is bound to `&to 0xFF`; our [`patches/0001-persist-default-layer.patch`](patches/0001-persist-default-layer.patch) treats `0xFF` as "flip the Dvorak/Qwerty bit of the default layer" and saves that one bit to settings, reloading it on boot. Only the Dvorak/Qwerty bit is persisted; the Mac/Win half always comes from the physical slide, so the switch always wins at boot. This is the ZMK mirror of QMK's `set_single_persistent_default_layer`.
 
+Fn+Z also **flashes the whole board** for feedback (green = Dvorak, blue = Qwerty). The colour is painted at the PWM flush ([`patches/0002-rgb-dwerty-flash.patch`](patches/0002-rgb-dwerty-flash.patch)) so it overrides any effect, and it briefly forces the Keychron indicator render on (like the battery indicator) so it shows even when RGB is otherwise off.
+
 The keymap is generated from the stock shield keymap by [`scripts/gen_keymap.py`](scripts/gen_keymap.py), which keeps Keychron's preamble (their custom behaviours, macros and combos) and rewrites only the layers and the toggle combo. Regenerate with:
 
 ```bash
@@ -34,7 +36,7 @@ python3 scripts/gen_keymap.py
 
 The build and the tests run against different ZMK trees, on purpose:
 
-- **Build** the real firmware on Keychron's fork (`Keychron/zmk@rtl8762g`, pinned to commit `101a23c`), board `keychron`, shield `keychron_v6_ultra_ansi`, in the `zmk-build-arm:3.5` container. The build applies [`patches/0001-persist-default-layer.patch`](patches/0001-persist-default-layer.patch) onto the fork's `app/src/keymap.c` (idempotently) so the layout choice persists.
+- **Build** the real firmware on Keychron's fork (`Keychron/zmk@rtl8762g`, pinned to commit `101a23c`), board `keychron`, shield `keychron_v6_ultra_ansi`, in the `zmk-build-arm:3.5` container. The build applies the patches in [`patches/`](patches) onto the fork's `app/src/` (idempotently): `0001` persists the layout choice and drives the Mac/Win slide from its GPIO, and `0002` adds the Fn+Z RGB flash.
 - **Test** the behaviour on upstream `zmkfirmware/zmk` `native_sim` snapshot tests, in the `zmk-build-arm:4.1` container. The fork cannot host-test because its core headers pull in the Realtek HAL (`rtl_pinmux.h`). `&mod_morph` + `keep-mods` is identical between the fork and upstream, so behaviour proven on upstream holds for the real firmware.
 
 Both need [Podman](https://podman.io), or Docker if you set `DWERTY_CONTAINER_ENGINE=docker` (CI uses Docker). Each toolchain is set up once into `.cache/` (gitignored); the first run downloads Zephyr and is slow.
