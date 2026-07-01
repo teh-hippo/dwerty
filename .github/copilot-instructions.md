@@ -64,7 +64,7 @@ cd ultra
 - The build board is `keychron`, **not** `rtl8762gtu_kb` (a plain build fails on the undefined `RTK_DFU` symbol).
 - Keep the Dvorak→Qwerty pairs identical to `max`'s `qwerty_shortcut_map[]`. When that map changes, update both firmwares.
 - Behaviour tests are ZMK `native_sim` snapshots (`tests/<case>/native_sim.keymap` + `events.patterns` + `keycode_events.snapshot`).
-- Flashing uses Realtek DFU (no UF2). The RTK `prepend_header` packaging tool is x86_64-only and fails on aarch64 hosts.
+- Flashing is Realtek DFU (no UF2), verified on hardware: pop the spacebar keycap and hold the button beneath it while plugging in USB to enter DFU (enumerates `0BDA:4762`), then flash the `cfu/` folder with Keychron's `cfudownloadtool` (Windows). `scripts/package.sh` builds that folder: it wraps `zmk.bin` with the fork's x86-only `prepend_header` and Realtek `PackCli` (fetched pinned + SHA256-verified from `rtkconnectivity/rtl87x2g_sdk`, run under `qemu-x86_64` on aarch64), keyed off the committed `ultra/flash_map.ini`.
 
 ## CI & releases
 
@@ -73,4 +73,4 @@ Three GitHub Actions workflows:
 - `.github/workflows/firmware-ultra.yml` (**Build Ultra Firmware**) runs only on `ultra-v*` tags and `workflow_dispatch` (the ZMK build is slow). It reuses `ultra/scripts/{test,build,package}.sh` with `DWERTY_CONTAINER_ENGINE=docker`.
 - `.github/workflows/ultra-fork-update.yml` watches the pinned Keychron fork weekly; on a new SHA it bumps the pin, builds/tests, and opens a PR.
 
-Releases are per keyboard and share one **Dwerty** project version: tag `max-v<x.y.z>` or `ultra-v<x.y.z>`. That Dwerty version is our own; it is separate from the **Keychron anchor** each firmware reports for compatibility (V6 Max `DEVICE_VER` 1.1.2; V6 Ultra fork `app/VERSION` 1.0.2). The V6 Ultra release is published as an experimental pre-release (not yet hardware-verified) and includes the Realtek `zmk_ota_MP.bin`.
+Releases are per keyboard and share one **Dwerty** project version: tag `max-v<x.y.z>` or `ultra-v<x.y.z>`. That Dwerty version is our own; it is separate from the **Keychron anchor** each firmware reports for compatibility (V6 Max `DEVICE_VER` 1.1.2; V6 Ultra fork `app/VERSION` 1.0.2). The V6 Ultra release is hardware-verified and ships a `*_cfu.zip` (the Realtek CFU offer + payload folder for `cfudownloadtool`) alongside the raw `zmk.bin`/`.hex` and `zmk_ota_MP.bin`.

@@ -22,12 +22,13 @@ jobs:
         # The scripts auto-detect the Podman preinstalled on ubuntu-latest and
         # run it with --userns=keep-id, so container-written files stay owned by
         # the runner (matching local) and need no sudo to clean up. The x86
-        # Realtek prepend_header in package.sh also runs natively here (no qemu).
+        # Realtek prepend_header and PackCli in package.sh also run natively
+        # here (no qemu); PackCli is fetched pinned and SHA256-verified.
         run: |
           ./scripts/test.sh
           rm -rf .cache/upstream   # reclaim disk before the fork build
 
-      - name: Build firmware (Keychron fork) and package OTA
+      - name: Build firmware (Keychron fork) and package CFU
         working-directory: ultra
         run: |
           ./scripts/build.sh
@@ -54,6 +55,8 @@ jobs:
           add ultra/build/zmk.bin        "${TAG}-keychron_v6_ultra.bin"
           add ultra/build/zmk.hex        "${TAG}-keychron_v6_ultra.hex"
           add ultra/build/zmk_ota_MP.bin "${TAG}-keychron_v6_ultra_ota_MP.bin"
+          ( cd ultra/build && zip -rq cfu.zip cfu )
+          add ultra/build/cfu.zip        "${TAG}-keychron_v6_ultra_cfu.zip"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -63,20 +66,23 @@ jobs:
             ultra/build/zmk.bin
             ultra/build/zmk.hex
             ultra/build/zmk_ota_MP.bin
+            ultra/build/cfu
           retention-days: 7
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/ultra-v')
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
-          name: "Keychron V6 Ultra 8K ${{ github.ref_name }} (experimental)"
-          prerelease: true
+          name: "Keychron V6 Ultra 8K ${{ github.ref_name }}"
+          prerelease: false
           body: |
-            Experimental Dwerty firmware for the Keychron V6 Ultra 8K (ZMK).
+            Dwerty firmware for the Keychron V6 Ultra 8K (ZMK), built on Keychron's ZMK fork (rtl8762g), which reports firmware version v${{ steps.assets.outputs.anchor }}.
 
-            Built on Keychron's ZMK fork (rtl8762g), which reports firmware version v${{ steps.assets.outputs.anchor }}.
+            Verified on hardware. Flashing self-built firmware voids your warranty.
 
-            This build has not been verified on hardware yet, and flashing self-built firmware voids your warranty. To flash, hold the back-of-board button (P2_5) to enter DFU, then push the *_ota_MP.bin image with Keychron's cfudownloadtool (Windows). SHA256 sums are attached.
+            To flash on Windows: pop off the spacebar keycap and hold the button beneath it while plugging in the USB cable to enter DFU (the keyboard enumerates as `0BDA:4762` "Keychron usb DFU"). Unzip `*_cfu.zip` and point Keychron's cfudownloadtool at the resulting `cfu` folder. To return to stock, re-enter DFU and reflash the official firmware from the Keychron Launcher.
+
+            SHA256 sums are attached.
           files: |
             ultra/release/ultra-v*
           generate_release_notes: true

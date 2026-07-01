@@ -33,4 +33,4 @@ cd ultra && ./scripts/build.sh && ./scripts/test.sh
 
 ## Releases
 
-Each keyboard is released independently from a Git tag that shares one Dwerty project version: `max-v<x.y.z>` for the V6 Max and `ultra-v<x.y.z>` for the V6 Ultra. The Dwerty version is our own and does not have to match the Keychron firmware version each board reports. Pre-built binaries are attached to the [Releases](../../releases) page; the V6 Ultra builds are experimental until verified on hardware.
+Each keyboard is released independently from a Git tag that shares one Dwerty project version: `max-v<x.y.z>` for the V6 Max and `ultra-v<x.y.z>` for the V6 Ultra. The Dwerty version is our own and does not have to match the Keychron firmware version each board reports. Pre-built binaries are attached to the [Releases](../../releases) page; both keyboards are verified on hardware.

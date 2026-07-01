@@ -4,7 +4,7 @@
 
 ZMK firmware for the Keychron V6 Ultra 8K that reproduces the "Dwerty" behaviour from the QMK [`max/`](../max) firmware: the base layer types Dvorak, but holding or one-shotting Ctrl/Alt/Win sends the key in its Qwerty physical position (modifier kept), so shortcuts stay in muscle memory. Shift is excluded, so shifted letters still type Dvorak.
 
-> Status: spike. The behaviour is proven with hardware-free tests and the firmware compiles for the real board. Flashing has not been exercised on hardware (see "Flashing").
+> Status: verified on hardware. The behaviour is covered by hardware-free tests, the firmware builds for the real board, and it has been flashed and validated on a V6 Ultra (see "Flashing").
 
 ## How it works
 
@@ -73,29 +73,35 @@ The persistent Fn+Z toggle lives in the `keymap.c` patch (settings on the fork),
 
 ## Flashing
 
-Not yet exercised on hardware, but de-risked. From reading the fork's DFU code (`app/src/dfu/dfu_common.c`), the bootloader verifies image integrity with a SHA256 stored in the image header (no asymmetric code-signing) and any optional AES layer uses a key hardcoded in the open-source firmware. There is also a back-of-board button (P2_5) that enters an independent DFU app for recovery. So self-built images should be accepted via Keychron's Realtek CFU/DFU path.
+Verified on hardware. Flashing self-built firmware voids your warranty; you can always return to stock by reflashing the official firmware from the Keychron Launcher.
 
-The one snag is tooling, not signing: the Realtek `prepend_header` OTA packaging tool is x86_64-only. `build.sh` therefore treats the compiled `zmk.elf/hex/bin` as the deliverable and tolerates that last step failing. `scripts/package.sh` then produces the flashable image, running the x86 tool under `qemu-x86_64` on aarch64 hosts (needs `sudo apt-get install qemu-user`):
+The bootloader accepts self-built images. Reading the fork's DFU code (`app/src/dfu/dfu_common.c`), it gates the switch on a SHA256 in the image header plus the 8-byte customer name `KCZKV68K`, with no asymmetric code-signing. The only real snag is tooling: Realtek's `prepend_header` and `PackCli` packers are x86_64-only, so `package.sh` runs them under `qemu-x86_64` on aarch64 hosts (needs `sudo apt-get install qemu-user`).
 
 ```bash
-./scripts/package.sh   # -> ultra/build/zmk_ota_MP.bin (MP/CFU image)
+./scripts/build.sh     # compile on the Keychron fork -> ultra/build/zmk.bin
+./scripts/package.sh   # -> ultra/build/cfu/ (CFU offer + payload), plus zmk_ota*.bin
 ```
 
-This has been run successfully on aarch64, producing `zmk_ota.bin` (image header) and `zmk_ota_MP.bin` (MP/CFU image). The remaining step needs hardware: hold the back-of-board button to enter DFU and push `zmk_ota_MP.bin` with Keychron's `cfudownloadtool` (Windows). This voids warranty.
+`package.sh` fetches Realtek's `PackCli` (pinned and SHA256-verified from rtkconnectivity's public SDK), wraps the image with `prepend_header`, and packs the `cfu/` folder (`_ImgPacketFile.offer.bin` + `.payload.bin`) that `cfudownloadtool` flashes. The `flash_map.ini` layout lives in this repo.
+
+To flash on Windows:
+
+1. Pop off the spacebar keycap and hold the button beneath it while plugging in the USB cable. The keyboard enters DFU and enumerates as `0BDA:4762` "Keychron usb DFU".
+2. Point Keychron's `cfudownloadtool` at the `cfu` folder (locally, or the unzipped `*_cfu.zip` from a release) and download.
+3. The board reboots into the new firmware.
 
 ## Releases
 
 Releases are published per keyboard from a Git tag. The V6 Ultra uses **`ultra-v<dwerty>`** tags, where `<dwerty>` is our shared Dwerty project version (the same scheme as the V6 Max's `max-v*`). That version is our own and need not match the Keychron firmware version the board reports (currently v1.0.2, the fork's ZMK app version).
 
-Each `ultra-v*` tag runs the behaviour tests, builds the firmware on the Keychron fork, packages the Realtek OTA image, and publishes a **pre-release** (the build is not yet hardware-verified) with these assets:
+Each `ultra-v*` tag runs the behaviour tests, builds the firmware on the Keychron fork, packs the CFU folder, and publishes a release with these assets:
 
+- `*-keychron_v6_ultra_cfu.zip`: the CFU offer + payload folder to flash with `cfudownloadtool` (see above).
 - `*-keychron_v6_ultra.bin` / `.hex`: the raw compiled image.
-- `*-keychron_v6_ultra_ota_MP.bin`: the Realtek MP/CFU image to flash via `cfudownloadtool`.
+- `*-keychron_v6_ultra_ota_MP.bin`: the Realtek MP/CFU image.
 - a `.sha256` for each.
 
 ```bash
-git tag ultra-v1.0.0
-git push origin ultra-v1.0.0
+git tag ultra-v2.2.0
+git push origin ultra-v2.2.0
 ```
-
-Releases stay marked experimental until a build has been flashed and confirmed on real hardware.
