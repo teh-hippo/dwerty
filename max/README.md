@@ -33,22 +33,7 @@ Hold **Fn**, press **Z** to toggle between Dwerty and Qwerty within the current 
 
 ## Fn Layer
 
-Key positions are labelled by their Qwerty location on the physical keyboard.
-
-| Key | Function | | Key | Function |
-|-----|----------|-|-----|----------|
-| Z | Layout selector | | 1/2/3 | Bluetooth hosts |
-| / | Help overlay | | 4 | 2.4G |
-| Tab | RGB toggle | | B | Battery level (wireless only) |
-| Q/A | RGB effect ↑/↓ | | N | N-key rollover |
-| W/S | RGB brightness ↑/↓ | | Knob | RGB brightness |
-| E/D | RGB hue ↑/↓ | | | |
-| R/F | RGB saturation ↑/↓ | | | |
-| T/G | RGB speed ↑/↓ | | | |
-
-## Help Overlay
-
-Press **Fn+/** to light up all Fn feature keys with self-describing animations. Each key demonstrates its function through its LED behaviour (e.g., brightness keys pulse bright/dim, hue keys cycle colours, speed keys flash fast/slow). Press any key or release Fn to exit.
+The layout selector above (**Fn+Z**) is our only addition. Everything else on the Fn layer is stock Keychron: Bluetooth and 2.4G host switching, RGB controls, battery level, N-key rollover and the knob. To see or remap the full Fn legend, open the keyboard in the [Keychron Launcher](https://launcher.keychron.com).
 
 ## Build & Flash
 
