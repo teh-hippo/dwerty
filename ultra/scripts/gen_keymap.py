@@ -13,11 +13,14 @@ the QMK max/ firmware (which dropped pure Dvorak):
     3 WIN_DWERTY - Win base + the same Dvorak/morphs.
     4 FN         - stock Mac fn (RGB/BT/media); shared by both halves.
 
-Mac/Win is the native Keychron slide switch: a continuously-held GPIO &mo. On a
-Mac base it holds the matching Win base (Qwerty->&mo 2, Dwerty->&mo 3); on a Win
-base it is stock &none. The fn key becomes &mo 4 on every base. Fn+Z is a combo
-bound to `&to 0xFF`, a sentinel our keymap.c patch turns into "toggle the
-Dwerty/Qwerty half" (0<->1, 2<->3); `&to` persists the default layer, so the
+Mac/Win is the native Keychron slide switch (a maintained GPIO). Rather than the
+stock momentary &mo overlay - which a marginal boot scan can miss, leaving the
+board stuck on Mac - our keymap.c patch reads the slide GPIO level and drives the
+OS-half bit of the default layer at boot and on every edge, so the slide is
+honoured deterministically. The slide cell (position 109) is therefore &none
+here. The fn key becomes &mo 4 on every base. Fn+Z is bound to `&to 0xFF`, a
+sentinel our patch turns into "flip the Dvorak/Qwerty mode bit" (0<->1, 2<->3);
+only that mode bit is persisted, so the slide always wins at boot and the typing
 choice survives reboot.
 
 The stock keymap is read from git (HEAD) in the fork workspace so it is always
@@ -102,15 +105,19 @@ def main():
     macfn = extract_bindings('layer_one', stock)        # Mac fn
     winbase = extract_bindings('layer_two', stock)      # Win base (mods/F-row)
 
-    # fn -> &mo 4 on every base. The Mac slide switch (&mo 2) keeps the OS half's
-    # Dwerty/Qwerty choice: it points at WIN_QWERTY (2) from MAC_QWERTY and
-    # WIN_DWERTY (3) from MAC_DWERTY. Win bases keep stock &none.
-    mac_qwerty = macbase.replace('&mo 1', '&mo 4')
-    mac_dwerty = morph(macbase).replace('&mo 1', '&mo 4').replace('&mo 2', '&mo 3')
+    # fn -> &mo 4 on every base. The Mac/Win slide (position 109) is driven in C:
+    # our keymap.c patch reads the slide GPIO level and sets the OS-half bit of
+    # the default layer at boot and on every edge, so the switch is honoured
+    # deterministically (the stock momentary &mo overlay could be missed by a
+    # marginal boot scan, leaving the board stuck on Mac). Neutralise the stock
+    # slide overlay (&mo 2) to &none on the Mac bases; the Win bases are &none
+    # already. A targeted replace keeps the stock multi-line layout intact.
+    mac_qwerty = macbase.replace('&mo 1', '&mo 4').replace('&mo 2', '&none')
+    mac_dwerty = morph(macbase).replace('&mo 1', '&mo 4').replace('&mo 2', '&none')
     win_qwerty = winbase.replace('&mo 3', '&mo 4')
     win_dwerty = morph(winbase).replace('&mo 3', '&mo 4')
     # Fn+Z: Z (position 80) on the FN layer becomes &to 0xFF, a sentinel our
-    # keymap.c patch turns into a persisted Dwerty<->Qwerty half-toggle.
+    # keymap.c patch turns into a persisted Dwerty<->Qwerty toggle (mode bit only).
     fn = set_cell(re.sub(r'//[^\n]*', '', macfn).replace('&mo 1', '&mo 4'), 80, '&to 0xFF')
 
     dq_defs = []

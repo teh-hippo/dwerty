@@ -451,7 +451,7 @@
         &kp LSHFT                           &kp Z                   &kp X                               &kp C                   &kp V               &kp B           &kp N           &kp M               &kp COMMA   &kp DOT     &kp FSLH            &kp RSHFT                                                   &kp UP                                      &kp KP_N1        &kp KP_N2        &kp KP_N3
         &kp LCTRL   &uc LALT                &uc LCMD                                                                            &kp SPACE                                                                           &uc RCMD    &uc RALT            &mo 4               &kp RCTRL          &kp LEFT             &kp DOWN            &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
         //keychron control
-        &mo 2       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
+        &none       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
             >;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
@@ -467,7 +467,7 @@
         &kp LSHFT                           &dq_z                   &dq_x                               &dq_c                   &dq_v               &dq_b           &dq_n           &kp M               &dq_comma   &dq_dot     &dq_fslh            &kp RSHFT                                                   &kp UP                                      &kp KP_N1        &kp KP_N2        &kp KP_N3
         &kp LCTRL   &uc LALT                &uc LCMD                                                                            &kp SPACE                                                                           &uc RCMD    &uc RALT            &mo 4               &kp RCTRL          &kp LEFT             &kp DOWN            &kp RIGHT               &kp KP_N0                         &kp KP_DOT          &kp KP_ENTER
         //keychron control
-        &mo 3       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
+        &none       &kc SEL_BLE              &kc SEL_PPT            &kc SEL_USB             &kc BATCHG
             >;
             sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
         };
