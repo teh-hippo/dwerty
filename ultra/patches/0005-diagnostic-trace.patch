@@ -1,0 +1,873 @@
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+index 884b3d3..e8cd8c3 100644
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -88,6 +88,7 @@ zephyr_include_directories(${ZEPHYR_BASE}/subsys/bluetooth/host)
+ target_include_directories(app PRIVATE include)
+ 
+ target_sources(app PRIVATE src/stdlib.c)
++target_sources_ifdef(CONFIG_DWERTY_DIAGNOSTICS app PRIVATE src/dwerty_diag.c)
+ # target_sources(app PRIVATE src/activity.c)
+ target_sources(app PRIVATE src/behavior.c)
+ target_sources(app PRIVATE src/kscan.c)
+diff --git a/app/Kconfig b/app/Kconfig
+index b6776f0..aa53837 100644
+--- a/app/Kconfig
++++ b/app/Kconfig
+@@ -674,6 +674,29 @@ config LAUNCHER_USER_SET_DEBOUNCE
+     default n
+ endif
+ 
++config DWERTY_DIAGNOSTICS
++    bool "Enable Dwerty diagnostic trace"
++    depends on ZMK_LAUNCHER
++    default n
++    help
++      Record matrix, keymap, modifier, HID and PPT transport events in a
++      fixed-size RAM trace retrievable through the Launcher raw HID interface.
++
++config DWERTY_DIAGNOSTICS_BUFFER_SIZE
++    int "Dwerty diagnostic trace record count"
++    depends on DWERTY_DIAGNOSTICS
++    range 64 1024
++    default 512
++
++config DWERTY_DIAGNOSTICS_UART
++    bool "Stream Dwerty diagnostic records over UART2"
++    depends on DWERTY_DIAGNOSTICS
++    select SERIAL
++    default n
++    help
++      Stream framed binary trace records on the board's UART2 TX pin. This is
++      an independent evidence channel, but it changes power and timing.
++
+ config ZMK_SSD1306
+     bool "enable ssd1306 display"
+     default n
+diff --git a/app/module/drivers/kscan/kscan_gpio_matrix.c b/app/module/drivers/kscan/kscan_gpio_matrix.c
+index 877c0c2..9f8f57f 100644
+--- a/app/module/drivers/kscan/kscan_gpio_matrix.c
++++ b/app/module/drivers/kscan/kscan_gpio_matrix.c
+@@ -16,7 +16,9 @@
+ #include <zephyr/sys/util.h>
+ #include <zephyr/drivers/pinctrl.h>
+ #include <zmk/debounce.h>
++#include <zmk/dwerty_diag.h>
+ #include <zephyr/pm/device.h>
++#include <string.h>
+ #include "rtl_gpio.h"
+ #include "trace.h"
+ 
+@@ -24,6 +26,41 @@ LOG_MODULE_DECLARE(zmk, 4); // CONFIG_ZMK_LOG_LEVEL);
+ 
+ #define RTK_GPIO_FAST 1
+ void swd_pin_disable(void);
++
++#if IS_ENABLED(CONFIG_DWERTY_DIAGNOSTICS)
++
++static uint32_t dwerty_diag_raw_rows[32];
++static uint32_t dwerty_diag_raw_generation = UINT32_MAX;
++static inline void dwerty_diag_raw_matrix(uint8_t row, uint8_t column, bool active) {
++    if (row >= ARRAY_SIZE(dwerty_diag_raw_rows) || column >= 32) {
++        return;
++    }
++
++    uint32_t generation = dwerty_diag_generation();
++    if (dwerty_diag_raw_generation != generation) {
++        memset(dwerty_diag_raw_rows, 0, sizeof(dwerty_diag_raw_rows));
++        dwerty_diag_raw_generation = generation;
++    }
++
++    bool previous = (dwerty_diag_raw_rows[row] & BIT(column)) != 0;
++    if (previous == active) {
++        return;
++    }
++
++    WRITE_BIT(dwerty_diag_raw_rows[row], column, active);
++    dwerty_diag_record(DWERTY_DIAG_EVENT_MATRIX_RAW,
++                       active ? DWERTY_DIAG_FLAG_PRESSED : 0, row | ((uint16_t)column << 8), 0);
++}
++
++#else
++
++static inline void dwerty_diag_raw_matrix(uint8_t row, uint8_t column, bool active) {
++    (void)row;
++    (void)column;
++    (void)active;
++}
++
++#endif
+ /* GPIO buses definitions */
+ 
+ struct gpio_rtl87x2g_irq_info {
+@@ -535,6 +572,7 @@ static int kscan_matrix_read(const struct device *dev) {
+             }
+ #endif
+             int active = (port & BIT(pos)) ? 1 : 0;
++            dwerty_diag_raw_matrix(in_gpio->index, col, active);
+             // if(col==5 && j == 6)
+             // {
+             //     LOG_DBG("row:%d,pin:%d,col:%d,active:%d,port:%x",j,in_gpio->spec.pin,col,active,port);
+diff --git a/app/module/include/zmk/dwerty_diag.h b/app/module/include/zmk/dwerty_diag.h
+new file mode 100644
+index 0000000..4c66a99
+--- /dev/null
++++ b/app/module/include/zmk/dwerty_diag.h
+@@ -0,0 +1,54 @@
++#pragma once
++
++#include <stddef.h>
++#include <stdint.h>
++
++#include <zephyr/sys/util.h>
++
++enum dwerty_diag_event_type {
++    DWERTY_DIAG_EVENT_BOOT = 1,
++    DWERTY_DIAG_EVENT_ARM = 2,
++    DWERTY_DIAG_EVENT_MATRIX_RAW = 3,
++    DWERTY_DIAG_EVENT_KSCAN = 4,
++    DWERTY_DIAG_EVENT_KSCAN_DROP = 5,
++    DWERTY_DIAG_EVENT_POSITION = 6,
++    DWERTY_DIAG_EVENT_KEYMAP = 7,
++    DWERTY_DIAG_EVENT_MODIFIER = 8,
++    DWERTY_DIAG_EVENT_HID_CLEAR = 9,
++    DWERTY_DIAG_EVENT_HID_REPORT = 10,
++    DWERTY_DIAG_EVENT_HID_SEND = 11,
++    DWERTY_DIAG_EVENT_PPT_QUEUE = 12,
++    DWERTY_DIAG_EVENT_PPT_TX = 13,
++    DWERTY_DIAG_EVENT_PPT_STATE = 14,
++    DWERTY_DIAG_EVENT_ENDPOINT = 15,
++    DWERTY_DIAG_EVENT_FREEZE = 16,
++    DWERTY_DIAG_EVENT_MARK = 17,
++};
++
++enum dwerty_diag_freeze_reason {
++    DWERTY_DIAG_FREEZE_HOST = 1,
++    DWERTY_DIAG_FREEZE_SUSPICIOUS_MODIFIERS = 2,
++    DWERTY_DIAG_FREEZE_KSCAN_OVERFLOW = 3,
++    DWERTY_DIAG_FREEZE_PPT_OVERFLOW = 4,
++    DWERTY_DIAG_FREEZE_PPT_SEND = 5,
++    DWERTY_DIAG_FREEZE_MODIFIER_UNDERFLOW = 6,
++};
++
++#define DWERTY_DIAG_FLAG_PRESSED BIT(0)
++#define DWERTY_DIAG_FLAG_ERROR BIT(1)
++#define DWERTY_DIAG_FLAG_DISCARDED BIT(2)
++
++#if IS_ENABLED(CONFIG_DWERTY_DIAGNOSTICS)
++
++void dwerty_diag_record(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1);
++void dwerty_diag_record_hid(uint8_t transport, const uint8_t *report, size_t len);
++void dwerty_diag_freeze(uint8_t reason);
++uint32_t dwerty_diag_generation(void);
++
++#else
++
++#define dwerty_diag_record(...) ((void)0)
++#define dwerty_diag_record_hid(...) ((void)0)
++#define dwerty_diag_freeze(...) ((void)0)
++
++#endif
+diff --git a/app/src/dwerty_diag.c b/app/src/dwerty_diag.c
+new file mode 100644
+index 0000000..1d7ea53
+--- /dev/null
++++ b/app/src/dwerty_diag.c
+@@ -0,0 +1,345 @@
++#include <zephyr/device.h>
++#include <zephyr/init.h>
++#include <zephyr/kernel.h>
++#include <zephyr/spinlock.h>
++#include <zephyr/sys/atomic.h>
++#include <zephyr/sys/byteorder.h>
++
++#include <string.h>
++
++#if IS_ENABLED(CONFIG_DWERTY_DIAGNOSTICS_UART)
++#include <zephyr/drivers/uart.h>
++#endif
++
++#include <zmk/dwerty_diag.h>
++
++#define DWERTY_DIAG_COMMAND 0xD0
++#define DWERTY_DIAG_PROTOCOL_VERSION 1
++#define DWERTY_DIAG_SUBCOMMAND_INFO 0
++#define DWERTY_DIAG_SUBCOMMAND_READ 1
++#define DWERTY_DIAG_SUBCOMMAND_ARM 2
++#define DWERTY_DIAG_SUBCOMMAND_FREEZE 3
++#define DWERTY_DIAG_SUBCOMMAND_MARK 4
++#define DWERTY_DIAG_REPORT_SIZE 32
++#define DWERTY_DIAG_READ_HEADER_SIZE 8
++#define DWERTY_DIAG_UART_MAGIC_0 0xD7
++#define DWERTY_DIAG_UART_MAGIC_1 0x59
++
++struct dwerty_diag_record {
++    uint16_t sequence;
++    uint8_t type;
++    uint8_t flags;
++    uint32_t uptime_ms;
++    uint16_t arg0;
++    uint16_t arg1;
++} __packed;
++
++BUILD_ASSERT(sizeof(struct dwerty_diag_record) == 12);
++BUILD_ASSERT(CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE <= UINT16_MAX);
++
++static struct dwerty_diag_record records[CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE];
++static struct k_spinlock lock;
++static uint16_t head;
++static uint16_t count;
++static uint32_t next_sequence;
++static uint32_t overwritten;
++static bool frozen;
++static uint8_t freeze_reason;
++static uint8_t trigger_reason;
++static uint8_t trigger_remaining;
++static atomic_t generation;
++static atomic_t uart_dropped;
++
++void raw_hid_send(uint8_t *data, uint8_t length);
++
++static uint16_t dwerty_diag_crc16(const uint8_t *data, size_t len) {
++    uint16_t crc = 0xFFFF;
++
++    for (size_t i = 0; i < len; i++) {
++        crc ^= (uint16_t)data[i] << 8;
++        for (uint8_t bit = 0; bit < 8; bit++) {
++            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
++        }
++    }
++
++    return crc;
++}
++
++#if IS_ENABLED(CONFIG_DWERTY_DIAGNOSTICS_UART)
++
++K_MSGQ_DEFINE(dwerty_diag_uart_msgq, sizeof(struct dwerty_diag_record), 128, 4);
++static const struct device *const dwerty_diag_uart =
++    DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
++
++BUILD_ASSERT(!IS_ENABLED(CONFIG_CONSOLE),
++             "Dwerty UART diagnostics require CONFIG_CONSOLE=n");
++BUILD_ASSERT(!IS_ENABLED(CONFIG_UART_CONSOLE),
++             "Dwerty UART diagnostics require CONFIG_UART_CONSOLE=n");
++
++static void dwerty_diag_uart_thread(void *unused1, void *unused2, void *unused3) {
++    struct dwerty_diag_record record;
++    uint8_t frame[2 + sizeof(record) + sizeof(uint16_t)];
++
++    (void)unused1;
++    (void)unused2;
++    (void)unused3;
++    while (k_msgq_get(&dwerty_diag_uart_msgq, &record, K_FOREVER) == 0) {
++        if (!device_is_ready(dwerty_diag_uart)) {
++            atomic_inc(&uart_dropped);
++            continue;
++        }
++        frame[0] = DWERTY_DIAG_UART_MAGIC_0;
++        frame[1] = DWERTY_DIAG_UART_MAGIC_1;
++        memcpy(&frame[2], &record, sizeof(record));
++        sys_put_le16(dwerty_diag_crc16(frame, sizeof(frame) - sizeof(uint16_t)),
++                     &frame[sizeof(frame) - sizeof(uint16_t)]);
++
++        for (size_t i = 0; i < sizeof(frame); i++) {
++            uart_poll_out(dwerty_diag_uart, frame[i]);
++        }
++    }
++}
++
++K_THREAD_DEFINE(dwerty_diag_uart_thread_id, 1024, dwerty_diag_uart_thread, NULL, NULL, NULL,
++                K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
++
++static void dwerty_diag_stream(const struct dwerty_diag_record *record) {
++    if (k_msgq_put(&dwerty_diag_uart_msgq, record, K_NO_WAIT) < 0) {
++        atomic_inc(&uart_dropped);
++        return;
++    }
++}
++
++#else
++
++static void dwerty_diag_stream(const struct dwerty_diag_record *record) { (void)record; }
++
++#endif
++
++static void dwerty_diag_append_locked(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1,
++                                      struct dwerty_diag_record *record) {
++    *record = (struct dwerty_diag_record){
++        .sequence = (uint16_t)next_sequence++,
++        .type = type,
++        .flags = flags,
++        .uptime_ms = k_uptime_get_32(),
++        .arg0 = arg0,
++        .arg1 = arg1,
++    };
++
++    if (count == CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE) {
++        head = (head + 1) % CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE;
++        overwritten++;
++    } else {
++        count++;
++    }
++
++    uint16_t index = (head + count - 1) % CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE;
++    records[index] = *record;
++}
++
++void dwerty_diag_record(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1) {
++    struct dwerty_diag_record record;
++    struct dwerty_diag_record freeze_record;
++    bool appended = false;
++    bool freeze_appended = false;
++
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    if (!frozen) {
++        dwerty_diag_append_locked(type, flags, arg0, arg1, &record);
++        appended = true;
++        if (trigger_remaining > 0 && --trigger_remaining == 0) {
++            dwerty_diag_append_locked(DWERTY_DIAG_EVENT_FREEZE, 0, trigger_reason, 0,
++                                      &freeze_record);
++            freeze_reason = trigger_reason;
++            trigger_reason = 0;
++            frozen = true;
++            freeze_appended = true;
++        }
++    }
++    k_spin_unlock(&lock, key);
++
++    if (appended) {
++        dwerty_diag_stream(&record);
++    }
++    if (freeze_appended) {
++        dwerty_diag_stream(&freeze_record);
++    }
++}
++
++void dwerty_diag_freeze(uint8_t reason) {
++    struct dwerty_diag_record record;
++    bool appended = false;
++
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    if (!frozen) {
++        dwerty_diag_append_locked(DWERTY_DIAG_EVENT_FREEZE, 0, reason, 0, &record);
++        freeze_reason = reason;
++        trigger_reason = 0;
++        trigger_remaining = 0;
++        frozen = true;
++        appended = true;
++    }
++    k_spin_unlock(&lock, key);
++
++    if (appended) {
++        dwerty_diag_stream(&record);
++    }
++}
++
++void dwerty_diag_record_hid(uint8_t transport, const uint8_t *report, size_t len) {
++    if (report == NULL || len < 2) {
++        return;
++    }
++
++    uint8_t modifiers = report[0];
++    uint16_t state = modifiers | ((uint16_t)report[1] << 8);
++    dwerty_diag_record(DWERTY_DIAG_EVENT_HID_REPORT, transport, state,
++                       dwerty_diag_crc16(report, len));
++
++    if (__builtin_popcount((unsigned int)modifiers) >= 4) {
++        k_spinlock_key_t key = k_spin_lock(&lock);
++        if (!frozen && trigger_remaining == 0) {
++            trigger_reason = DWERTY_DIAG_FREEZE_SUSPICIOUS_MODIFIERS;
++            trigger_remaining = 8;
++        }
++        k_spin_unlock(&lock, key);
++    }
++}
++
++uint32_t dwerty_diag_generation(void) {
++    return (uint32_t)atomic_get(&generation);
++}
++
++static void dwerty_diag_reset(void) {
++    struct dwerty_diag_record record;
++
++#if IS_ENABLED(CONFIG_DWERTY_DIAGNOSTICS_UART)
++    k_msgq_purge(&dwerty_diag_uart_msgq);
++#endif
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    head = 0;
++    count = 0;
++    next_sequence = 0;
++    overwritten = 0;
++    frozen = false;
++    freeze_reason = 0;
++    trigger_reason = 0;
++    trigger_remaining = 0;
++    atomic_inc(&generation);
++    atomic_set(&uart_dropped, 0);
++    dwerty_diag_append_locked(DWERTY_DIAG_EVENT_ARM, 0, 0, 0, &record);
++    k_spin_unlock(&lock, key);
++
++    dwerty_diag_stream(&record);
++}
++
++static void dwerty_diag_fill_info(uint8_t *data, uint8_t subcommand) {
++    uint16_t snapshot_count;
++    uint32_t snapshot_next;
++    uint32_t snapshot_overwritten;
++    bool snapshot_frozen;
++    uint8_t snapshot_reason;
++    uint8_t snapshot_trigger_remaining;
++    uint8_t snapshot_trigger_reason;
++
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    snapshot_count = count;
++    snapshot_next = next_sequence;
++    snapshot_overwritten = overwritten;
++    snapshot_frozen = frozen;
++    snapshot_reason = freeze_reason;
++    snapshot_trigger_remaining = trigger_remaining;
++    snapshot_trigger_reason = trigger_reason;
++    k_spin_unlock(&lock, key);
++
++    memset(data, 0, DWERTY_DIAG_REPORT_SIZE);
++    data[0] = DWERTY_DIAG_COMMAND;
++    data[1] = subcommand;
++    data[2] = 0;
++    data[3] = DWERTY_DIAG_PROTOCOL_VERSION;
++    data[4] = sizeof(struct dwerty_diag_record);
++    sys_put_le16(CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE, &data[5]);
++    sys_put_le16(snapshot_count, &data[7]);
++    sys_put_le16((uint16_t)snapshot_next, &data[9]);
++    data[11] = snapshot_frozen;
++    data[12] = snapshot_reason;
++    sys_put_le32(snapshot_overwritten, &data[13]);
++    sys_put_le32((uint32_t)atomic_get(&uart_dropped), &data[17]);
++    sys_put_le32(k_uptime_get_32(), &data[21]);
++    data[25] = snapshot_trigger_remaining;
++    data[26] = snapshot_trigger_reason;
++    sys_put_le32(snapshot_next, &data[27]);
++}
++
++static void dwerty_diag_fill_records(uint8_t *data, uint16_t requested_index) {
++    struct dwerty_diag_record result[2];
++    uint8_t returned = 0;
++
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    while (returned < ARRAY_SIZE(result) && requested_index + returned < count) {
++        uint16_t index =
++            (head + requested_index + returned) % CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE;
++        result[returned] = records[index];
++        returned++;
++    }
++    k_spin_unlock(&lock, key);
++
++    memset(data, 0, DWERTY_DIAG_REPORT_SIZE);
++    data[0] = DWERTY_DIAG_COMMAND;
++    data[1] = DWERTY_DIAG_SUBCOMMAND_READ;
++    data[2] = 0;
++    data[3] = returned;
++    sys_put_le16(requested_index, &data[4]);
++    data[6] = sizeof(struct dwerty_diag_record);
++    data[7] = DWERTY_DIAG_PROTOCOL_VERSION;
++    memcpy(&data[DWERTY_DIAG_READ_HEADER_SIZE], result, returned * sizeof(result[0]));
++}
++
++bool launcher_command_kb(uint8_t *data, uint8_t length) {
++    if (length != DWERTY_DIAG_REPORT_SIZE || data[0] != DWERTY_DIAG_COMMAND) {
++        return false;
++    }
++
++    uint8_t subcommand = data[1];
++    uint16_t requested_index = sys_get_le16(&data[2]);
++    uint32_t marker = sys_get_le32(&data[2]);
++
++    switch (subcommand) {
++    case DWERTY_DIAG_SUBCOMMAND_INFO:
++        dwerty_diag_fill_info(data, subcommand);
++        break;
++    case DWERTY_DIAG_SUBCOMMAND_READ:
++        dwerty_diag_fill_records(data, requested_index);
++        break;
++    case DWERTY_DIAG_SUBCOMMAND_ARM:
++        dwerty_diag_reset();
++        dwerty_diag_fill_info(data, subcommand);
++        break;
++    case DWERTY_DIAG_SUBCOMMAND_FREEZE:
++        dwerty_diag_freeze(DWERTY_DIAG_FREEZE_HOST);
++        dwerty_diag_fill_info(data, subcommand);
++        break;
++    case DWERTY_DIAG_SUBCOMMAND_MARK:
++        dwerty_diag_record(DWERTY_DIAG_EVENT_MARK, 0, marker & 0xFFFF, marker >> 16);
++        dwerty_diag_fill_info(data, subcommand);
++        sys_put_le32(marker, &data[27]);
++        break;
++    default:
++        memset(data, 0, DWERTY_DIAG_REPORT_SIZE);
++        data[0] = DWERTY_DIAG_COMMAND;
++        data[1] = subcommand;
++        data[2] = 1;
++        break;
++    }
++
++    raw_hid_send(data, length);
++    return true;
++}
++
++static int dwerty_diag_init(void) {
++    dwerty_diag_record(DWERTY_DIAG_EVENT_BOOT, 0, 0, 0);
++    return 0;
++}
++
++SYS_INIT(dwerty_diag_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+diff --git a/app/src/endpoints.c b/app/src/endpoints.c
+index 7821ade..c301185 100644
+--- a/app/src/endpoints.c
++++ b/app/src/endpoints.c
+@@ -20,6 +20,7 @@
+ #include <zmk/events/usb_conn_state_changed.h>
+ #include <zmk/events/ppt_conn_state_changed.h>
+ #include <zmk/events/endpoint_changed.h>
++#include <zmk/dwerty_diag.h>
+ #if IS_ENABLED(CONFIG_ZMK_PPT)
+ #include <zmk/ppt/keyboard_ppt_app.h>
+ #endif
+@@ -155,6 +156,7 @@ bool kb_changed(void);
+ 
+ int transport_send(struct zmk_hid_keyboard_report *report, uint8_t len) {
+     int err = 0;
++    dwerty_diag_record_hid(current_instance.transport, (uint8_t *)&report->body, len - 1);
+     switch (current_instance.transport) {
+     case ZMK_TRANSPORT_USB: {
+         err = zmk_usb_hid_send_report((uint8_t *)report, len);
+@@ -175,6 +177,11 @@ int transport_send(struct zmk_hid_keyboard_report *report, uint8_t len) {
+         }
+     } break;
+     }
++    dwerty_diag_record(DWERTY_DIAG_EVENT_HID_SEND,
++                       (current_instance.transport << 4) |
++                           (err ? DWERTY_DIAG_FLAG_ERROR : 0),
++                       len,
++                       (uint16_t)err);
+     return err;
+ }
+ static int send_keyboard_report(void) {
+@@ -199,6 +206,11 @@ static int send_keyboard_report(void) {
+ }
+ #else
+ static int send_keyboard_report(void) {
++    struct zmk_hid_keyboard_report *diagnostic_report = zmk_hid_get_keyboard_report();
++    size_t diagnostic_len = sizeof(diagnostic_report->body);
++    dwerty_diag_record_hid(current_instance.transport, (uint8_t *)&diagnostic_report->body,
++                           diagnostic_len);
++
+     switch (current_instance.transport) {
+     case ZMK_TRANSPORT_USB: {
+ #if IS_ENABLED(CONFIG_ZMK_USB)
+@@ -206,6 +218,9 @@ static int send_keyboard_report(void) {
+         if (err) {
+             LOG_ERR("FAILED TO SEND OVER USB: %d", err);
+         }
++        dwerty_diag_record(DWERTY_DIAG_EVENT_HID_SEND,
++                           (ZMK_TRANSPORT_USB << 4) | (err ? DWERTY_DIAG_FLAG_ERROR : 0),
++                           diagnostic_len, (uint16_t)err);
+         return err;
+ #else
+         LOG_ERR("USB endpoint is not supported");
+@@ -215,8 +230,12 @@ static int send_keyboard_report(void) {
+     case ZMK_TRANSPORT_PPT: {
+         size_t len = 0;
+         uint8_t *p_data = get_keyboard_report(&len);
+-        return zmk_ppt_send_keyboard_report(
++        int err = zmk_ppt_send_keyboard_report(
+             p_data + 1, zmk_get_nkro_status() ? len - 1 : CONFIG_ZMK_HID_KEYBOARD_REPORT_SIZE + 2);
++        dwerty_diag_record(DWERTY_DIAG_EVENT_HID_SEND,
++                           (ZMK_TRANSPORT_PPT << 4) | (err ? DWERTY_DIAG_FLAG_ERROR : 0), len,
++                           (uint16_t)err);
++        return err;
+     } break;
+     case ZMK_TRANSPORT_BLE: {
+ #if IS_ENABLED(CONFIG_ZMK_BLE)
+@@ -226,6 +245,9 @@ static int send_keyboard_report(void) {
+         if (err) {
+             LOG_ERR("FAILED TO SEND OVER HOG: %d", err);
+         }
++        dwerty_diag_record(DWERTY_DIAG_EVENT_HID_SEND,
++                           (ZMK_TRANSPORT_BLE << 4) | (err ? DWERTY_DIAG_FLAG_ERROR : 0),
++                           diagnostic_len, (uint16_t)err);
+         return err;
+ #else
+         LOG_ERR("BLE HOG endpoint is not supported");
+@@ -538,6 +560,8 @@ static void update_current_endpoint(void) {
+     LOG_WRN("update_current_endpoint,cur:%d,new:%d", current_instance.transport,
+             new_instance.transport);
+     if (!zmk_endpoint_instance_eq(new_instance, current_instance)) {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_ENDPOINT, 0, current_instance.transport,
++                           new_instance.transport);
+         // Cancel all current keypresses so keys don't stay held on the old endpoint.
+         disconnect_current_endpoint();
+         // k_sem_take(&wait_disc,K_FOREVER);
+diff --git a/app/src/hid.c b/app/src/hid.c
+index 9944938..aca4e6d 100644
+--- a/app/src/hid.c
++++ b/app/src/hid.c
+@@ -9,6 +9,7 @@
+ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ 
+ #include <zmk/hid.h>
++#include <zmk/dwerty_diag.h>
+ #include <dt-bindings/zmk/modifiers.h>
+ 
+ static struct zmk_hid_keyboard_report keyboard_report = {
+@@ -55,11 +56,17 @@ int zmk_hid_register_mod(zmk_mod_t modifier) {
+     WRITE_BIT(explicit_modifiers, modifier, true);
+     zmk_mod_flags_t current = GET_MODIFIERS;
+     SET_MODIFIERS(explicit_modifiers);
++    dwerty_diag_record(DWERTY_DIAG_EVENT_MODIFIER, DWERTY_DIAG_FLAG_PRESSED,
++                       modifier | ((uint16_t)MIN(explicit_modifier_counts[modifier], 255) << 8),
++                       explicit_modifiers | ((uint16_t)GET_MODIFIERS << 8));
+     return current == GET_MODIFIERS ? 0 : 1;
+ }
+ 
+ int zmk_hid_unregister_mod(zmk_mod_t modifier) {
+     if (explicit_modifier_counts[modifier] <= 0) {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_MODIFIER, DWERTY_DIAG_FLAG_ERROR, modifier,
++                           explicit_modifiers | ((uint16_t)GET_MODIFIERS << 8));
++        dwerty_diag_freeze(DWERTY_DIAG_FREEZE_MODIFIER_UNDERFLOW);
+         LOG_ERR("Tried to unregister modifier %d too often", modifier);
+         return -EINVAL;
+     }
+@@ -78,6 +85,9 @@ int zmk_hid_unregister_mod(zmk_mod_t modifier) {
+     }
+     zmk_mod_flags_t current = GET_MODIFIERS;
+     SET_MODIFIERS(explicit_modifiers);
++    dwerty_diag_record(DWERTY_DIAG_EVENT_MODIFIER, 0,
++                       modifier | ((uint16_t)MIN(explicit_modifier_counts[modifier], 255) << 8),
++                       explicit_modifiers | ((uint16_t)GET_MODIFIERS << 8));
+     return current == GET_MODIFIERS ? 0 : 1;
+ }
+ 
+@@ -320,6 +330,9 @@ bool zmk_hid_keyboard_is_pressed(zmk_key_t code) {
+ }
+ 
+ void zmk_hid_keyboard_clear(void) {
++    dwerty_diag_record(DWERTY_DIAG_EVENT_HID_CLEAR, 0,
++                       keyboard_report.body.modifiers | ((uint16_t)explicit_modifiers << 8),
++                       implicit_modifiers | ((uint16_t)masked_modifiers << 8));
+     memset(&keyboard_report.body, 0, sizeof(keyboard_report.body));
+ }
+ 
+diff --git a/app/src/keymap.c b/app/src/keymap.c
+index 7387770..1f1615f 100644
+--- a/app/src/keymap.c
++++ b/app/src/keymap.c
+@@ -23,6 +23,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ 
+ #include <zmk/event_manager.h>
+ #include <zmk/events/position_state_changed.h>
++#include <zmk/dwerty_diag.h>
+ #include <zmk/events/layer_state_changed.h>
+ #include <zmk/events/sensor_event.h>
+ #include <drivers/behavior.h>
+@@ -381,6 +382,11 @@ int zmk_keymap_position_state_changed(uint8_t source, uint32_t position, bool pr
+         zmk_keymap_active_behavior_layer[position] = _zmk_keymap_layer_state;
+         zmk_keymap_active_behavior_default[position] = _zmk_keymap_layer_default;
+     }
++    dwerty_diag_record(
++        DWERTY_DIAG_EVENT_KEYMAP,
++        (pressed ? DWERTY_DIAG_FLAG_PRESSED : 0) | ((source & 0x0F) << 4), (uint16_t)position,
++        zmk_keymap_active_behavior_default[position] |
++            ((zmk_keymap_active_behavior_layer[position] & 0xFF) << 8));
+     for (int layer = ZMK_KEYMAP_LAYERS_LEN - 1;
+          layer >= zmk_keymap_active_behavior_default[position]; layer--) {
+         if ((zmk_keymap_active_behavior_layer[position] & BIT(layer)) ||
+diff --git a/app/src/kscan.c b/app/src/kscan.c
+index f047980..970e635 100644
+--- a/app/src/kscan.c
++++ b/app/src/kscan.c
+@@ -18,6 +18,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+ #include <zmk/mode_monitor.h>
+ #include <zmk/matrix.h>
+ #include <zmk/endpoints.h>
++#include <zmk/dwerty_diag.h>
+ #include <zephyr/drivers/gpio.h>
+ 
+ #define ZMK_KSCAN_EVENT_STATE_PRESSED 0
+@@ -95,6 +96,10 @@ static void zmk_kscan_callback(const struct device *dev, uint32_t row, uint32_t
+ #endif
+ 
+     {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_KSCAN,
++                           pressed ? DWERTY_DIAG_FLAG_PRESSED : 0,
++                           row | ((uint16_t)column << 8),
++                           k_msgq_num_used_get(&zmk_kscan_msgq));
+         struct zmk_kscan_event ev = {
+             .row = row,
+             .column = column,
+@@ -102,6 +107,9 @@ static void zmk_kscan_callback(const struct device *dev, uint32_t row, uint32_t
+ 
+         int err = k_msgq_put(&zmk_kscan_msgq, &ev, K_NO_WAIT);
+         if (err < 0) {
++            dwerty_diag_record(DWERTY_DIAG_EVENT_KSCAN_DROP, DWERTY_DIAG_FLAG_ERROR,
++                               row | ((uint16_t)column << 8), (uint16_t)err);
++            dwerty_diag_freeze(DWERTY_DIAG_FREEZE_KSCAN_OVERFLOW);
+             LOG_ERR("kscan msg full,err:%d", err);
+         }
+         k_work_submit(&msg_processor.work);
+@@ -114,6 +122,9 @@ void zmk_kscan_process_msgq(struct k_work *item) {
+     while (k_msgq_get(&zmk_kscan_msgq, &ev, K_NO_WAIT) == 0) {
+         bool pressed = (ev.state == ZMK_KSCAN_EVENT_STATE_PRESSED);
+         int32_t position = zmk_matrix_transform_row_column_to_position(ev.row, ev.column);
++        dwerty_diag_record(DWERTY_DIAG_EVENT_POSITION,
++                           pressed ? DWERTY_DIAG_FLAG_PRESSED : 0, (uint16_t)position,
++                           ev.row | ((uint16_t)ev.column << 8));
+         LOG_ERR("r:%d,c:%d,pos:%d", ev.row, ev.column, position);
+         if (position < 0) {
+             LOG_WRN("Not found in transform: row: %d, col: %d, pressed: %s", ev.row, ev.column,
+diff --git a/app/src/ppt/keyboard_ppt_app.c b/app/src/ppt/keyboard_ppt_app.c
+index 890e048..afb1cdf 100644
+--- a/app/src/ppt/keyboard_ppt_app.c
++++ b/app/src/ppt/keyboard_ppt_app.c
+@@ -15,6 +15,7 @@
+ #include <zmk/event_manager.h>
+ #include <zmk/events/ppt_conn_state_changed.h>
+ #include <zmk/events/led_state_changed.h>
++#include <zmk/dwerty_diag.h>
+ #include "rtl_pinmux.h"
+ // #include "trace.h"
+ #include <zmk/endpoints.h>
+@@ -104,8 +105,10 @@ static int64_t reconn_start_time;
+ void zmk_ppt_sync_event_cb(sync_event_t event);
+ 
+ static void raise_ppt_status_changed_event(struct k_work *_work) {
+-    raise_zmk_ppt_conn_state_changed(
+-        (struct zmk_ppt_conn_state_changed){.conn_state = zmk_ppt_get_conn_state()});
++    enum zmk_ppt_conn_state state = zmk_ppt_get_conn_state();
++    dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_STATE, 0, state,
++                       ppt_app_global_data.keyboard_ppt_status);
++    raise_zmk_ppt_conn_state_changed((struct zmk_ppt_conn_state_changed){.conn_state = state});
+ }
+ 
+ K_WORK_DEFINE(ppt_status_notifier_work, raise_ppt_status_changed_event);
+diff --git a/app/src/ppt/ppt_send.c b/app/src/ppt/ppt_send.c
+index 93b0c43..f91733d 100644
+--- a/app/src/ppt/ppt_send.c
++++ b/app/src/ppt/ppt_send.c
+@@ -6,6 +6,7 @@
+ #include <zephyr/logging/log.h>
+ #include <zmk/endpoints.h>
+ #include <zmk/hid.h>
++#include <zmk/dwerty_diag.h>
+ #include "pm.h"
+ 
+ LOG_MODULE_DECLARE(zmk, 4); // CONFIG_ZMK_LOG_LEVEL);
+@@ -99,9 +100,14 @@ int ringbuf_msg_put(zmk_ppt_report_t *rep) {
+     k_spin_unlock(&lock, key);
+ 
+     if (discarded) {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_QUEUE, DWERTY_DIAG_FLAG_DISCARDED,
++                           rep->packet.opcode, ringbuf_used_get());
++        dwerty_diag_freeze(DWERTY_DIAG_FREEZE_PPT_OVERFLOW);
+         LOG_WRN("PPT queue full, discarded oldest report");
+     }
+     if (read < sizeof(zmk_ppt_report_t) || written < sizeof(zmk_ppt_report_t)) {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_QUEUE, DWERTY_DIAG_FLAG_ERROR,
++                           rep->packet.opcode, -ENOSPC);
+         LOG_ERR("PPT queue write failed");
+         return -ENOSPC;
+     }
+@@ -163,15 +169,22 @@ int zmk_ppt_send_keyboard_report(uint8_t *report, uint8_t len) {
+         }
+     }
+ 
+-    if (!zmk_ppt_is_ready())
++    if (!zmk_ppt_is_ready()) {
++        dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_QUEUE, DWERTY_DIAG_FLAG_ERROR,
++                           rep.packet.opcode, zmk_ppt_get_conn_state());
+         return -1;
++    }
+     // if(k_timer_remaining_get(&poll_timer)==0)
+     // {
+     //     k_timer_start(&poll_timer,POLL_PERIOD ,K_FOREVER);
+     // }
+     // // LOG_DBG("msg:%d",ringbuf_used_get());
+     // return ringbuf_msg_put(&rep);
+-    ringbuf_msg_put(&rep);
++    int err = ringbuf_msg_put(&rep);
++    if (err) {
++        return err;
++    }
++    dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_QUEUE, 0, rep.packet.opcode, ringbuf_used_get());
+     LOG_DBG("msg:%d", ringbuf_used_get());
+     if (k_timer_remaining_get(&poll_timer) == 0)
+         poll_timer_expiry_function(NULL);
+@@ -190,7 +203,10 @@ int zmk_ppt_send_consumer_report(uint8_t *report, uint8_t len) {
+     //     k_timer_start(&poll_timer,POLL_PERIOD ,K_FOREVER);
+     // }
+     // return ringbuf_msg_put(&rep);
+-    ringbuf_msg_put(&rep);
++    int err = ringbuf_msg_put(&rep);
++    if (err) {
++        return err;
++    }
+     if (k_timer_remaining_get(&poll_timer) == 0)
+         poll_timer_expiry_function(NULL);
+     return 0;
+@@ -207,7 +223,10 @@ int zmk_ppt_send_mouse_report(uint8_t *report, uint8_t len) {
+     //     k_timer_start(&poll_timer,POLL_PERIOD ,K_FOREVER);
+     // }
+     // return ringbuf_msg_put(&rep);
+-    ringbuf_msg_put(&rep);
++    int err = ringbuf_msg_put(&rep);
++    if (err) {
++        return err;
++    }
+     if (k_timer_remaining_get(&poll_timer) == 0)
+         poll_timer_expiry_function(NULL);
+     return 0;
+@@ -221,7 +240,10 @@ int zmk_24g_send_launcher_report(uint8_t *payload, uint8_t payload_len) {
+     memcpy(rep.packet.plain_payload + 1, payload, payload_len);
+     if (!zmk_ppt_is_ready())
+         return -1;
+-    ringbuf_msg_put(&rep);
++    int err = ringbuf_msg_put(&rep);
++    if (err) {
++        return err;
++    }
+     if (k_timer_remaining_get(&poll_timer) == 0)
+         poll_timer_expiry_function(NULL);
+     return 0;
+@@ -237,7 +259,10 @@ int ppt_send_device_state_info(void) {
+ 
+     if (!zmk_ppt_is_ready())
+         return -1;
+-    ringbuf_msg_put(&rep);
++    int err = ringbuf_msg_put(&rep);
++    if (err) {
++        return err;
++    }
+     if (k_timer_remaining_get(&poll_timer) == 0)
+         poll_timer_expiry_function(NULL);
+     return 0;
+@@ -328,7 +353,7 @@ void poll_timer_expiry_function(struct k_timer *timer) {
+             *p_crc++ = crc & 0xff;
+             *p_crc = crc >> 8;
+             LOG_DBG("crc:%04x", crc);
+-            sync_msg_send(SYNC_MSG_TYPE_INFINITE_RETRANS, tx, len + 2, NULL);
++            int err = sync_msg_send(SYNC_MSG_TYPE_INFINITE_RETRANS, tx, len + 2, NULL);
+ 
+             toggle_debug_pin();
+ #else
+@@ -336,6 +361,13 @@ void poll_timer_expiry_function(struct k_timer *timer) {
+             toggle_debug_pin();
+             LOG_WRN("tx len:%d,err:%d", len, err);
+ #endif
++            dwerty_diag_record(DWERTY_DIAG_EVENT_PPT_TX,
++                               ((tx[0] & 0x03) << 4) |
++                                   (err ? DWERTY_DIAG_FLAG_ERROR : 0),
++                               report[0].packet.opcode | ((uint16_t)len << 8), (uint16_t)err);
++            if (err) {
++                dwerty_diag_freeze(DWERTY_DIAG_FREEZE_PPT_SEND);
++            }
+             if (++count >= 3)
+                 break;
+         } else

@@ -7,19 +7,43 @@
 # On an x86_64 host they run natively. PackCli is not in the Keychron fork, so
 # it is fetched pinned from rtkconnectivity's public SDK and verified by SHA256.
 #
-# Run scripts/build.sh first to produce ultra/build/zmk.bin.
-# Usage: ./scripts/package.sh
+# Run scripts/build.sh first to produce the selected profile's zmk.bin.
+# Usage: ./scripts/package.sh [--profile release|diagnostics|diagnostics-uart]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ULTRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+PROFILE="release"
+if [[ "${1:-}" == "--profile" ]]; then
+  if [[ "$#" -lt "2" ]]; then
+    echo "Usage: $0 [--profile release|diagnostics|diagnostics-uart]" >&2
+    exit 2
+  fi
+  PROFILE="$2"
+  shift 2
+fi
+if [[ "$#" != "0" ]]; then
+  echo "Usage: $0 [--profile release|diagnostics|diagnostics-uart]" >&2
+  exit 2
+fi
+case "${PROFILE}" in
+  release|diagnostics|diagnostics-uart) ;;
+  *)
+    echo "Unknown build profile: ${PROFILE}" >&2
+    exit 2
+    ;;
+esac
+
 FORK_ZMK="${ULTRA_DIR}/.cache/fork/zmk"
 TOOL="${FORK_ZMK}/app/tools/prepend_header/linux-x86_64/prepend_header"
 MPINI="${FORK_ZMK}/app/tools/mp.ini"
-BIN="${ULTRA_DIR}/build/zmk.bin"
 OUT="${ULTRA_DIR}/build"
+if [[ "${PROFILE}" != "release" ]]; then
+  OUT="${OUT}/${PROFILE}"
+fi
+BIN="${OUT}/zmk.bin"
 FLASH_MAP="${ULTRA_DIR}/flash_map.ini"
 
 # PackCli is Realtek's sanctioned CFU packer. It is not in the Keychron fork, so

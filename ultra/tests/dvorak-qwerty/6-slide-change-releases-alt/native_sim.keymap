@@ -1,0 +1,16 @@
+#include <dt-bindings/zmk/keys.h>
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+#include "../behavior_default_slide.dtsi"
+
+&kscan {
+    events = <
+        /* Hold Mac LAlt, switch to the Win half, then release LAlt. */
+        ZMK_MOCK_PRESS(0,1,10)
+        ZMK_MOCK_PRESS(1,0,10)
+        ZMK_MOCK_PRESS(1,1,10)
+        ZMK_MOCK_RELEASE(1,1,10)
+        ZMK_MOCK_RELEASE(1,0,10)
+        ZMK_MOCK_RELEASE(0,1,10)
+    >;
+};

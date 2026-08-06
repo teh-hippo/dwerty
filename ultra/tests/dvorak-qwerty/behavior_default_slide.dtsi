@@ -1,0 +1,41 @@
+/* Four-position model for a live Mac/Win default-layer change. */
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        mac_qwerty {
+            bindings = <
+                &kp LCTRL  &kp LALT
+                &mo 4      &kp N1
+            >;
+        };
+
+        mac_dwerty {
+            bindings = <
+                &kp LCTRL  &kp LALT
+                &mo 4      &kp N1
+            >;
+        };
+
+        win_qwerty {
+            bindings = <
+                &kp LCTRL  &kp LGUI
+                &mo 4      &kp N1
+            >;
+        };
+
+        win_dwerty {
+            bindings = <
+                &kp LCTRL  &kp LGUI
+                &mo 4      &kp N1
+            >;
+        };
+
+        fn_layer {
+            bindings = <
+                &trans     &trans
+                &trans     &to 0xFE
+            >;
+        };
+    };
+};

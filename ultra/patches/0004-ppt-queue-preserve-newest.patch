@@ -1,0 +1,75 @@
+diff --git a/app/src/ppt/ppt_send.c b/app/src/ppt/ppt_send.c
+index a884a2cf..fd99824f 100644
+--- a/app/src/ppt/ppt_send.c
++++ b/app/src/ppt/ppt_send.c
+@@ -60,32 +60,52 @@ K_TIMER_DEFINE(poll_timer, poll_timer_expiry_function, NULL);
+ 
+ RING_BUF_DECLARE(zmk_ppt_msgs, sizeof(zmk_ppt_report_t) * 64);
+ 
+-void ringbuf_reset(void) { ring_buf_reset(&zmk_ppt_msgs); }
+-int ringbuf_used_get(void) { return ring_buf_size_get(&zmk_ppt_msgs) / (sizeof(zmk_ppt_report_t)); }
++void ringbuf_reset(void) {
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    ring_buf_reset(&zmk_ppt_msgs);
++    k_spin_unlock(&lock, key);
++}
++int ringbuf_used_get(void) {
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    uint32_t used = ring_buf_size_get(&zmk_ppt_msgs) / sizeof(zmk_ppt_report_t);
++    k_spin_unlock(&lock, key);
++    return used;
++}
+ bool ringbuf_almost_full(void) { return ringbuf_used_get() > 20; }
+ int ringbuf_msg_peek(zmk_ppt_report_t *rep) {
+-    return ring_buf_peek(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    uint32_t read = ring_buf_peek(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
++    k_spin_unlock(&lock, key);
++    return read;
+ }
+ int ringbuf_msg_get(zmk_ppt_report_t *rep) {
+-    return ring_buf_get(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    uint32_t read = ring_buf_get(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
++    k_spin_unlock(&lock, key);
++    return read;
+ }
+ int ringbuf_msg_put(zmk_ppt_report_t *rep) {
+-    int err = 0;
++    bool discarded = false;
++    uint32_t read = sizeof(zmk_ppt_report_t);
++
++    k_spinlock_key_t key = k_spin_lock(&lock);
++    if (ring_buf_space_get(&zmk_ppt_msgs) < sizeof(zmk_ppt_report_t)) {
++        zmk_ppt_report_t discarded_report;
++        read = ring_buf_get(&zmk_ppt_msgs, (uint8_t *)&discarded_report,
++                            sizeof(zmk_ppt_report_t));
++        discarded = read == sizeof(zmk_ppt_report_t);
++    }
++    uint32_t written = ring_buf_put(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
++    k_spin_unlock(&lock, key);
+ 
+-    if (ring_buf_space_get(&zmk_ppt_msgs) >= sizeof(zmk_ppt_report_t)) {
+-        k_spinlock_key_t key = k_spin_lock(&lock);
+-        int wr = ring_buf_put(&zmk_ppt_msgs, (uint8_t *)rep, sizeof(zmk_ppt_report_t));
+-        if (wr < sizeof(zmk_ppt_report_t)) {
+-            LOG_ERR("write err!");
+-        }
+-        k_spin_unlock(&lock, key);
+-    } else {
+-        LOG_ERR("no buf,discard old one!");
+-        zmk_ppt_report_t rep;
+-        ringbuf_msg_get(&rep);
+-        err = 1;
++    if (discarded) {
++        LOG_WRN("PPT queue full, discarded oldest report");
++    }
++    if (read < sizeof(zmk_ppt_report_t) || written < sizeof(zmk_ppt_report_t)) {
++        LOG_ERR("PPT queue write failed");
++        return -ENOSPC;
+     }
+-    return err;
++    return 0;
+ }
+ 
+ void toggle_debug_pin(void);

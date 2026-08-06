@@ -1,0 +1,27 @@
+diff --git a/app/src/keymap.c b/app/src/keymap.c
+index 926a99b7..956906a2 100644
+--- a/app/src/keymap.c
++++ b/app/src/keymap.c
+@@ -68,6 +68,7 @@ static uint8_t _zmk_keymap_layer_default = 0;
+ // here so that even if that layer is deactivated before the "up", event, we
+ // still send the release event to the behavior in that layer also.
+ static uint32_t zmk_keymap_active_behavior_layer[ZMK_KEYMAP_LEN];
++static uint8_t zmk_keymap_active_behavior_default[ZMK_KEYMAP_LEN];
+ 
+ static struct zmk_behavior_binding zmk_keymap[ZMK_KEYMAP_LAYERS_LEN][ZMK_KEYMAP_LEN] = {
+     DT_INST_FOREACH_CHILD_SEP(0, TRANSFORMED_LAYER, (, ))};
+@@ -248,9 +249,12 @@ int zmk_keymap_position_state_changed(uint8_t source, uint32_t position, bool pr
+                                       int64_t timestamp) {
+     if (pressed) {
+         zmk_keymap_active_behavior_layer[position] = _zmk_keymap_layer_state;
++        zmk_keymap_active_behavior_default[position] = _zmk_keymap_layer_default;
+     }
+-    for (int layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer >= _zmk_keymap_layer_default; layer--) {
+-        if (zmk_keymap_layer_active_with_state(layer, zmk_keymap_active_behavior_layer[position])) {
++    for (int layer = ZMK_KEYMAP_LAYERS_LEN - 1;
++         layer >= zmk_keymap_active_behavior_default[position]; layer--) {
++        if ((zmk_keymap_active_behavior_layer[position] & BIT(layer)) ||
++            layer == zmk_keymap_active_behavior_default[position]) {
+             int ret = zmk_keymap_apply_position_state(source, layer, position, pressed, timestamp);
+             if (ret > 0) {
+                 LOG_DBG("behavior processing to continue to next layer");

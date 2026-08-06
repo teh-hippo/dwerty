@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Behaviour tests (upstream ZMK native_sim)
+      - name: Behaviour tests (pinned ZMK host simulation)
         working-directory: ultra
         # The scripts auto-detect the Podman preinstalled on ubuntu-latest and
         # run it with --userns=keep-id, so container-written files stay owned by
@@ -78,7 +78,7 @@ jobs:
           body: |
             Dwerty firmware for the Keychron V6 Ultra 8K (ZMK), built on Keychron's ZMK fork (rtl8762g), which reports firmware version v${{ steps.assets.outputs.anchor }}.
 
-            Verified on hardware. Flashing self-built firmware voids your warranty.
+            This firmware is built for the real board and covered by pinned host simulations. The project has previously been flashed and functionally checked on a V6 Ultra, but this workflow does not exercise hardware. Flashing self-built firmware voids your warranty.
 
             To flash on Windows: pop off the spacebar keycap and hold the button beneath it while plugging in the USB cable to enter DFU (the keyboard enumerates as `0BDA:4762` "Keychron usb DFU"). Unzip `*_cfu.zip` and point Keychron's cfudownloadtool at the resulting `cfu` folder. To return to stock, re-enter DFU and reflash the official firmware from the Keychron Launcher.
 
