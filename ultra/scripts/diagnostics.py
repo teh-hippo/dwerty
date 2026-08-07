@@ -3,9 +3,12 @@
 
 import argparse
 import datetime as dt
+import glob
 import json
+import os
 import pathlib
 import secrets
+import select
 import struct
 import time
 
@@ -14,6 +17,7 @@ DEFAULT_VID = 0x3434
 DEFAULT_PIDS = {0x0C60, 0xD028}
 RAW_USAGE_PAGE = 0xFF60
 RAW_USAGE = 0x61
+RAW_DESCRIPTOR_SIGNATURE = b"\x06\x60\xff\x09\x61"
 COMMAND = 0xD0
 REPORT_SIZE = 32
 RECORD_FORMAT = "<HBBIHH"
@@ -198,7 +202,60 @@ def import_hid():
     return hid
 
 
+def parse_hid_id(uevent):
+    for line in uevent.splitlines():
+        if not line.startswith("HID_ID="):
+            continue
+        try:
+            _, vendor, product = line.split("=", 1)[1].split(":")
+            return int(vendor, 16), int(product, 16)
+        except ValueError:
+            return None
+    return None
+
+
+def hidraw_devices(vid, pid):
+    devices = []
+    for sys_path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+        root = pathlib.Path(sys_path) / "device"
+        try:
+            uevent = (root / "uevent").read_text()
+            descriptor = (root / "report_descriptor").read_bytes()
+        except OSError:
+            continue
+        identity = parse_hid_id(uevent)
+        if identity is None:
+            continue
+        vendor_id, product_id = identity
+        if vendor_id != vid or (pid is not None and product_id != pid):
+            continue
+        if pid is None and product_id not in DEFAULT_PIDS:
+            continue
+        if RAW_DESCRIPTOR_SIGNATURE not in descriptor:
+            continue
+        properties = dict(
+            line.split("=", 1) for line in uevent.splitlines() if "=" in line
+        )
+        devices.append(
+            {
+                "backend": "hidraw",
+                "path": f"/dev/{pathlib.Path(sys_path).name}",
+                "vendor_id": vendor_id,
+                "product_id": product_id,
+                "product_string": properties.get("HID_NAME"),
+                "serial_number": properties.get("HID_UNIQ"),
+                "usage_page": RAW_USAGE_PAGE,
+                "usage": RAW_USAGE,
+            }
+        )
+    return devices
+
+
 def candidate_devices(vid, pid):
+    direct = hidraw_devices(vid, pid)
+    if direct:
+        return direct
+
     hid = import_hid()
     devices = []
     for device in hid.enumerate(vid, pid or 0):
@@ -234,13 +291,52 @@ def device_summary(index, device):
 
 class DiagnosticDevice:
     def __init__(self, device_info, timeout_ms):
-        self._hid = import_hid()
-        self._device = self._hid.device()
-        self._device.open_path(device_info["path"])
+        self._backend = device_info.get("backend", "hidapi")
+        self._device = None
+        self._fd = None
+        if self._backend == "hidraw":
+            try:
+                self._fd = os.open(device_info["path"], os.O_RDWR | os.O_NONBLOCK)
+            except PermissionError as error:
+                raise SystemExit(
+                    f"Permission denied opening {device_info['path']}; run this command with sudo."
+                ) from error
+            self._drain_hidraw()
+        else:
+            hid = import_hid()
+            self._device = hid.device()
+            self._device.open_path(device_info["path"])
         self._timeout_ms = timeout_ms
 
     def close(self):
-        self._device.close()
+        if self._fd is not None:
+            os.close(self._fd)
+        elif self._device is not None:
+            self._device.close()
+
+    def _drain_hidraw(self):
+        while True:
+            readable, _, _ = select.select((self._fd,), (), (), 0)
+            if not readable:
+                return
+            os.read(self._fd, REPORT_SIZE + 1)
+
+    def _write(self, request):
+        report = bytes([0]) + request
+        if self._fd is not None:
+            written = os.write(self._fd, report)
+        else:
+            written = self._device.write(report)
+        if written <= 0:
+            raise RuntimeError("failed to write diagnostic command")
+
+    def _read(self, timeout_ms):
+        if self._fd is not None:
+            readable, _, _ = select.select((self._fd,), (), (), timeout_ms / 1000)
+            if not readable:
+                return b""
+            return os.read(self._fd, REPORT_SIZE + 1)
+        return bytes(self._device.read(REPORT_SIZE + 1, timeout_ms))
 
     def exchange(self, subcommand, value=0):
         request = bytearray(REPORT_SIZE)
@@ -250,13 +346,11 @@ class DiagnosticDevice:
             struct.pack_into("<I", request, 2, value)
         else:
             struct.pack_into("<H", request, 2, value)
-        written = self._device.write(bytes([0]) + request)
-        if written <= 0:
-            raise RuntimeError("failed to write diagnostic command")
+        self._write(request)
         deadline = time.monotonic() + self._timeout_ms / 1000
         while time.monotonic() < deadline:
             remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
-            response = bytes(self._device.read(REPORT_SIZE + 1, remaining_ms))
+            response = bytes(self._read(remaining_ms))
             if len(response) == REPORT_SIZE + 1 and response[0] == 0:
                 response = response[1:]
             if (

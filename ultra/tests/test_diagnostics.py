@@ -81,6 +81,14 @@ class DiagnosticsProtocolTest(unittest.TestCase):
         self.assertEqual(record["event"], "mark")
         self.assertEqual(record["nonce"], 0x89ABCDEF)
 
+    def test_parses_linux_hid_identity(self):
+        identity = diagnostics.parse_hid_id("HID_ID=0003:00003434:00000C60\n")
+        self.assertEqual(identity, (0x3434, 0x0C60))
+
+    def test_recognises_launcher_report_descriptor(self):
+        descriptor = b"\x05\x01" + diagnostics.RAW_DESCRIPTOR_SIGNATURE + b"\xa1\x01"
+        self.assertIn(diagnostics.RAW_DESCRIPTOR_SIGNATURE, descriptor)
+
 
 if __name__ == "__main__":
     unittest.main()

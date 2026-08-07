@@ -21,17 +21,17 @@ The raw HID interface uses usage page `0xFF60`, usage `0x61`. It is available th
 
 ```bash
 # List matching raw HID interfaces.
-uv run --with hidapi scripts/diagnostics.py list
+sudo scripts/diagnostics.py list
 
 # Clear and arm the trace before a trial.
-uv run --with hidapi scripts/diagnostics.py arm
+sudo scripts/diagnostics.py arm
 
 # Insert a nonce in the device trace and record the matching Windows monotonic
 # interval for correlation with USBPcap, ETW or Raw Input capture.
-uv run --with hidapi scripts/diagnostics.py mark
+sudo scripts/diagnostics.py mark
 
 # Freeze and dump the ring as JSON Lines after a fault.
-uv run --with hidapi scripts/diagnostics.py dump --output trace.jsonl
+sudo scripts/diagnostics.py dump --output trace.jsonl
 
 # Capture the independent 2 Mbaud UART2 stream.
 uv run --with pyserial scripts/diagnostics.py serial --port COM5 > uart-trace.jsonl
