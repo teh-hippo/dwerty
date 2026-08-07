@@ -36,8 +36,12 @@ sudo scripts/diagnostics.py mark
 sudo scripts/diagnostics.py dump --output trace.jsonl
 
 # Preferred incident command. It attaches through usbipd when needed, freezes
-# immediately, and writes timestamped trace and metadata files to /mnt/shared.
+# immediately, validates and saves the trace, re-arms, then detaches from WSL.
 scripts/capture-incident.sh
+
+# Preserve the in-device frozen trace or leave the wired interface in WSL.
+scripts/capture-incident.sh --keep-frozen
+scripts/capture-incident.sh --keep-attached
 
 # Capture the independent 2 Mbaud UART2 stream.
 uv run --with pyserial scripts/diagnostics.py serial --port COM5 > uart-trace.jsonl
@@ -49,7 +53,7 @@ The ring is ordinary RAM, not retained storage. Do not power-cycle or reboot aft
 
 Trace files contain physical key positions and timing. Treat them as sensitive input data, minimise retention, and do not publish an unreviewed capture.
 
-`scripts/capture-incident.sh` is the field runbook in executable form. It never clears or re-arms the ring. Copy it to another machine if needed, or run the committed copy directly from the repository.
+`scripts/capture-incident.sh` is the field runbook in executable form. It validates the complete JSONL file before re-arming, then detaches the keyboard from WSL so Windows regains wired access. Use `--keep-frozen` when the in-device copy must remain untouched. Copy the script to another machine if needed, or run the committed copy directly from the repository.
 
 UART2 TX is configured on `P3_0`, with RX on `P3_1`, at 2,000,000 baud. The V6 Ultra shield overlay overrides the base board's UART2 pinctrl, and the generated devicetree resolves TX to pin 24 (`P3_0`). The existing debug GPIO is `GPIOA10`, labelled `P1_2` in the shield overlay. Confirm the physical pads and logic voltage against the board schematic before connecting equipment. Never drive a board signal from a 5 V adaptor.
 
