@@ -53,6 +53,10 @@ class FakeClient:
 
 
 class ScDfuTest(unittest.TestCase):
+    def test_default_profile_is_release(self):
+        args = scdfu.parser().parse_args(["inspect"])
+        self.assertEqual(args.profile, "release")
+
     def test_crc_matches_reflected_crc_without_final_xor(self):
         self.assertEqual(scdfu.crc32_rtk(b"123456789"), 0x340BC6D9)
 

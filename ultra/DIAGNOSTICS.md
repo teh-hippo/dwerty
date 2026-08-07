@@ -4,6 +4,8 @@ The diagnostic build records the stages that can turn a physical key transition 
 
 The trace is compiled out of normal release firmware. The ring-only build adds a 512-record RAM buffer and a private command on the existing Keychron Launcher raw HID interface. The UART build also streams the same records independently on UART2 from a dedicated low-priority thread.
 
+Capture begins automatically when diagnostic firmware boots. `arm` clears the ring and establishes sequence zero; it does not enable tracing. Normal release firmware contains no trace buffer or diagnostic command. Diagnostic records remain only in RAM and are not transmitted until requested, but they contain physical key positions and timing and should be treated as sensitive input data.
+
 ## Build and collect
 
 ```bash

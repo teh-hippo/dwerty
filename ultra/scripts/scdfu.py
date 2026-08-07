@@ -481,7 +481,7 @@ def parser():
     source.add_argument(
         "--profile",
         choices=tuple(PROFILE_IMAGES),
-        default="diagnostics",
+        default="release",
         help="packaged build profile to use when --image is omitted",
     )
 
