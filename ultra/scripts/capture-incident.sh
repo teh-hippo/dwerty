@@ -61,9 +61,24 @@ ORIGINAL_USER="${SUDO_USER:-${USER:-}}"
 ORIGINAL_UID="${SUDO_UID:-$(id -u)}"
 ORIGINAL_GID="${SUDO_GID:-$(id -g)}"
 USBIPD="${DWERTY_USBIPD:-$(command -v usbipd.exe 2>/dev/null || true)}"
-if [[ -z "${USBIPD}" && -x "/mnt/c/Program Files/usbipd-win/usbipd.exe" ]]; then
+CMD_EXE="${DWERTY_CMD_EXE:-$(command -v cmd.exe 2>/dev/null || true)}"
+if [[ -z "${USBIPD}" && -f "/mnt/c/Program Files/usbipd-win/usbipd.exe" ]]; then
   USBIPD="/mnt/c/Program Files/usbipd-win/usbipd.exe"
 fi
+if [[ -z "${CMD_EXE}" && -f "/mnt/c/Windows/System32/cmd.exe" ]]; then
+  CMD_EXE="/mnt/c/Windows/System32/cmd.exe"
+fi
+
+run_usbipd() {
+  if [[ -n "${USBIPD}" ]] && "${USBIPD}" "$@"; then
+    return 0
+  fi
+  if [[ -n "${CMD_EXE}" ]]; then
+    "${CMD_EXE}" /d /s /c "usbipd $*"
+    return $?
+  fi
+  return 127
+}
 
 if [[ -n "${ULTRA_ARG}" ]]; then
   ULTRA_DIR="$(realpath "${ULTRA_ARG}")"
@@ -87,6 +102,9 @@ if [[ "${EUID}" -ne 0 ]]; then
   fi
   if [[ -n "${USBIPD}" ]]; then
     sudo_env+=("DWERTY_USBIPD=${USBIPD}")
+  fi
+  if [[ -n "${CMD_EXE}" ]]; then
+    sudo_env+=("DWERTY_CMD_EXE=${CMD_EXE}")
   fi
   if [[ "${KEEP_FROZEN}" == "1" ]]; then
     sudo_args+=(--keep-frozen)
@@ -114,9 +132,9 @@ mkdir -p "${OUTPUT_DIR}"
 
 device_json="$("${DIAGNOSTICS}" list)"
 if ! grep -q '"usage_page": "ff60"' <<<"${device_json}"; then
-  if [[ -n "${USBIPD}" && -x "${USBIPD}" ]]; then
+  if [[ -n "${USBIPD}" || -n "${CMD_EXE}" ]]; then
     echo "Diagnostic HID is not attached; asking usbipd to attach it to WSL..." >&2
-    "${USBIPD}" attach --wsl --hardware-id 3434:0c60 >/dev/null 2>&1 || true
+    run_usbipd attach --wsl --hardware-id 3434:0c60 >/dev/null 2>&1 || true
     sleep 2
     device_json="$("${DIAGNOSTICS}" list)"
   fi
@@ -188,16 +206,29 @@ fi
 
 if [[ "${KEEP_ATTACHED}" == "1" ]]; then
   echo "Wired keyboard left attached to WSL (--keep-attached)." | tee -a "${metadata}"
-elif [[ -n "${USBIPD}" && -x "${USBIPD}" ]]; then
-  busid="$("${USBIPD}" list 2>/dev/null | tr -d '\r' |
-    awk 'tolower($2) == "3434:0c60" { print $1; exit }')"
-  if [[ -n "${busid}" ]]; then
-    "${USBIPD}" detach --busid "${busid}" >/dev/null
+elif [[ -n "${USBIPD}" || -n "${CMD_EXE}" ]]; then
+  usbipd_list="$(run_usbipd list 2>/dev/null | tr -d '\r' || true)"
+  {
+    echo "usbipd_list_begin"
+    printf '%s\n' "${usbipd_list}"
+    echo "usbipd_list_end"
+  } >>"${metadata}"
+  busid="$(awk '{
+    for (field = 1; field <= NF; field++) {
+      if (tolower($field) == "3434:0c60") {
+        print $1
+        exit
+      }
+    }
+  }' <<<"${usbipd_list}")"
+  if [[ "${busid}" =~ ^[0-9]+-[0-9]+$ ]] &&
+     run_usbipd detach --busid "${busid}" >/dev/null 2>&1; then
     echo "usbipd_detached_busid=${busid}" >>"${metadata}"
     echo "Detached ${busid} from WSL; Windows can use the wired keyboard again."
   else
-    echo "usbipd_busid=not-found" >>"${metadata}"
-    echo "Could not identify the usbipd bus ID; the keyboard remains attached to WSL." >&2
+    echo "usbipd_detach=failed busid=${busid:-not-found}" >>"${metadata}"
+    echo "Could not detach the keyboard; it remains attached to WSL." >&2
+    echo "Run: usbipd.exe detach --busid <BUSID>" >&2
   fi
 fi
 
