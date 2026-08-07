@@ -39,6 +39,11 @@ sudo scripts/diagnostics.py dump --output trace.jsonl
 # immediately, validates and saves the trace, re-arms, then detaches from WSL.
 scripts/capture-incident.sh
 
+# Auto-detection prefers the known 2.4 GHz receiver, then wired USB. Override
+# this for a different receiver or to force the direct keyboard path.
+scripts/capture-incident.sh --hardware-id 3434:d028
+scripts/capture-incident.sh --hardware-id 3434:0c60
+
 # Preserve the in-device frozen trace or leave the wired interface in WSL.
 scripts/capture-incident.sh --keep-frozen
 scripts/capture-incident.sh --keep-attached
@@ -53,7 +58,7 @@ The ring is ordinary RAM, not retained storage. Do not power-cycle or reboot aft
 
 Trace files contain physical key positions and timing. Treat them as sensitive input data, minimise retention, and do not publish an unreviewed capture.
 
-`scripts/capture-incident.sh` is the field runbook in executable form. It validates the complete JSONL file before re-arming, then detaches the keyboard from WSL so Windows regains wired access. Use `--keep-frozen` when the in-device copy must remain untouched. Copy the script to another machine if needed, or run the committed copy directly from the repository.
+`scripts/capture-incident.sh` is the field runbook in executable form. It recognises the known V6 Ultra wired PID `3434:0C60` and receiver PID `3434:D028`, preferring the receiver so a wireless trace can be retrieved without switching keyboard transport. `--hardware-id VID:PID` supports an explicit or future device. usbipd still requires a one-time elevated `bind` for each Windows USB device before WSL can attach it. The script validates the complete JSONL file before re-arming, then detaches the selected device so Windows regains access. Use `--keep-frozen` when the in-device copy must remain untouched.
 
 UART2 TX is configured on `P3_0`, with RX on `P3_1`, at 2,000,000 baud. The V6 Ultra shield overlay overrides the base board's UART2 pinctrl, and the generated devicetree resolves TX to pin 24 (`P3_0`). The existing debug GPIO is `GPIOA10`, labelled `P1_2` in the shield overlay. Confirm the physical pads and logic voltage against the board schematic before connecting equipment. Never drive a board signal from a 5 V adaptor.
 

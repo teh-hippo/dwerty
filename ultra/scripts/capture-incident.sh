@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: capture-incident.sh [--keep-frozen] [--keep-attached] [ULTRA_DIR]
+Usage: capture-incident.sh [OPTIONS] [ULTRA_DIR]
 
 Immediately freezes and dumps the V6 Ultra diagnostic RAM trace.
 Run this before clearing the keyboard fault, rebooting or power-cycling.
@@ -17,14 +17,29 @@ After validating the saved trace, the default is to clear and re-arm the
 diagnostic ring, then detach the wired keyboard from WSL so Windows can use it.
 Use --keep-frozen to preserve the in-device trace, or --keep-attached to leave
 the USB device attached to WSL.
+
+Options:
+  --hardware-id VID:PID  Select a specific usbipd device.
+  --keep-frozen          Preserve the in-device frozen trace after saving.
+  --keep-attached        Leave the selected USB device attached to WSL.
 EOF
 }
 
 KEEP_FROZEN=0
 KEEP_ATTACHED=0
+HARDWARE_ID="${DWERTY_HARDWARE_ID:-}"
 ULTRA_ARG=""
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
+    --hardware-id)
+      shift
+      if [[ "$#" == "0" ]]; then
+        echo "--hardware-id requires VID:PID." >&2
+        exit 2
+      fi
+      HARDWARE_ID="$1"
+      ;;
+    --hardware-id=*) HARDWARE_ID="${1#*=}" ;;
     --keep-frozen) KEEP_FROZEN=1 ;;
     --keep-attached) KEEP_ATTACHED=1 ;;
     --help|-h)
@@ -80,6 +95,39 @@ run_usbipd() {
   return 127
 }
 
+normalise_hardware_id() {
+  local hardware_id="${1,,}"
+  if [[ ! "${hardware_id}" =~ ^[0-9a-f]{4}:[0-9a-f]{4}$ ]]; then
+    echo "Invalid hardware ID '${1}'; expected VID:PID such as 3434:d028." >&2
+    return 2
+  fi
+  printf '%s\n' "${hardware_id}"
+}
+
+diagnostic_list() {
+  local hardware_id="$1"
+  local vid="${hardware_id%:*}"
+  local pid="${hardware_id#*:}"
+  "${DIAGNOSTICS}" --vid "0x${vid}" --pid "0x${pid}" list
+}
+
+usbipd_busid() {
+  local usbipd_list="$1"
+  local hardware_id="$2"
+  awk -v hardware_id="${hardware_id}" '{
+    for (field = 1; field <= NF; field++) {
+      if (tolower($field) == hardware_id) {
+        print $1
+        exit
+      }
+    }
+  }' <<<"${usbipd_list}"
+}
+
+if [[ -n "${HARDWARE_ID}" ]]; then
+  HARDWARE_ID="$(normalise_hardware_id "${HARDWARE_ID}")"
+fi
+
 if [[ -n "${ULTRA_ARG}" ]]; then
   ULTRA_DIR="$(realpath "${ULTRA_ARG}")"
 elif [[ -x "${SCRIPT_DIR}/diagnostics.py" ]]; then
@@ -94,7 +142,7 @@ else
   exit 2
 fi
 
-if [[ "${EUID}" -ne 0 ]]; then
+if [[ "${EUID}" -ne 0 && "${DWERTY_CAPTURE_TEST_MODE:-0}" != "1" ]]; then
   sudo_env=()
   sudo_args=()
   if [[ -n "${DWERTY_CAPTURE_DIR:-}" ]]; then
@@ -105,6 +153,9 @@ if [[ "${EUID}" -ne 0 ]]; then
   fi
   if [[ -n "${CMD_EXE}" ]]; then
     sudo_env+=("DWERTY_CMD_EXE=${CMD_EXE}")
+  fi
+  if [[ -n "${HARDWARE_ID}" ]]; then
+    sudo_args+=(--hardware-id "${HARDWARE_ID}")
   fi
   if [[ "${KEEP_FROZEN}" == "1" ]]; then
     sudo_args+=(--keep-frozen)
@@ -130,18 +181,50 @@ else
 fi
 mkdir -p "${OUTPUT_DIR}"
 
-device_json="$("${DIAGNOSTICS}" list)"
-if ! grep -q '"usage_page": "ff60"' <<<"${device_json}"; then
-  if [[ -n "${USBIPD}" || -n "${CMD_EXE}" ]]; then
-    echo "Diagnostic HID is not attached; asking usbipd to attach it to WSL..." >&2
-    run_usbipd attach --wsl --hardware-id 3434:0c60 >/dev/null 2>&1 || true
-    sleep 2
-    device_json="$("${DIAGNOSTICS}" list)"
-  fi
+CANDIDATE_IDS=()
+if [[ -n "${HARDWARE_ID}" ]]; then
+  CANDIDATE_IDS=("${HARDWARE_ID}")
+else
+  # Prefer the receiver so a wireless incident can be retrieved without
+  # changing keyboard transport. Fall back to the direct wired keyboard.
+  CANDIDATE_IDS=("3434:d028" "3434:0c60")
 fi
-if ! grep -q '"usage_page": "ff60"' <<<"${device_json}"; then
-  echo "No V6 Ultra diagnostic HID interface found." >&2
-  echo "Attach it with: usbipd.exe attach --wsl --hardware-id 3434:0c60" >&2
+
+SELECTED_HARDWARE_ID=""
+device_json=""
+for candidate in "${CANDIDATE_IDS[@]}"; do
+  candidate_json="$(diagnostic_list "${candidate}")"
+  if grep -qE '"usage_page"[[:space:]]*:[[:space:]]*"ff60"' <<<"${candidate_json}"; then
+    SELECTED_HARDWARE_ID="${candidate}"
+    device_json="${candidate_json}"
+    break
+  fi
+done
+
+if [[ -z "${SELECTED_HARDWARE_ID}" && ( -n "${USBIPD}" || -n "${CMD_EXE}" ) ]]; then
+  initial_usbipd_list="$(run_usbipd list 2>/dev/null | tr -d '\r' || true)"
+  for candidate in "${CANDIDATE_IDS[@]}"; do
+    candidate_busid="$(usbipd_busid "${initial_usbipd_list}" "${candidate}")"
+    if [[ ! "${candidate_busid}" =~ ^[0-9]+-[0-9]+$ ]]; then
+      continue
+    fi
+    echo "Attaching ${candidate} (${candidate_busid}) to WSL for diagnostic capture..." >&2
+    run_usbipd attach --wsl --busid "${candidate_busid}" >/dev/null 2>&1 || true
+    sleep 2
+    candidate_json="$(diagnostic_list "${candidate}")"
+    if grep -qE '"usage_page"[[:space:]]*:[[:space:]]*"ff60"' <<<"${candidate_json}"; then
+      SELECTED_HARDWARE_ID="${candidate}"
+      device_json="${candidate_json}"
+      break
+    fi
+    run_usbipd detach --busid "${candidate_busid}" >/dev/null 2>&1 || true
+  done
+fi
+
+if [[ -z "${SELECTED_HARDWARE_ID}" ]]; then
+  echo "No supported diagnostic HID interface found." >&2
+  echo "Known defaults: 3434:d028 (receiver), 3434:0c60 (wired)." >&2
+  echo "Override with: --hardware-id VID:PID" >&2
   exit 1
 fi
 
@@ -152,7 +235,10 @@ temporary="$(mktemp "${OUTPUT_DIR}/.dwerty-incident.XXXXXX")"
 trap 'rm -f "${temporary}"' EXIT
 
 echo "Freezing diagnostic state and writing ${capture}..." >&2
-"${DIAGNOSTICS}" dump --output "${temporary}"
+vid="${SELECTED_HARDWARE_ID%:*}"
+pid="${SELECTED_HARDWARE_ID#*:}"
+DIAGNOSTIC_ARGS=(--vid "0x${vid}" --pid "0x${pid}")
+"${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${temporary}"
 mv "${temporary}" "${capture}"
 trap - EXIT
 
@@ -182,6 +268,7 @@ PY
   echo "host=$(hostname)"
   echo "ultra_dir=${ULTRA_DIR}"
   echo "repository_commit=$(git -C "${ULTRA_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "hardware_id=${SELECTED_HARDWARE_ID}"
   echo "device=${device_json}"
   echo "header=$(head -n 1 "${capture}")"
   echo "${validation}"
@@ -199,7 +286,7 @@ echo
 if [[ "${KEEP_FROZEN}" == "1" ]]; then
   echo "Diagnostic ring left frozen (--keep-frozen)." | tee -a "${metadata}"
 else
-  rearm_json="$("${DIAGNOSTICS}" arm)"
+  rearm_json="$("${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" arm)"
   echo "rearm=${rearm_json}" >>"${metadata}"
   echo "Diagnostic ring cleared and re-armed."
 fi
@@ -213,18 +300,11 @@ elif [[ -n "${USBIPD}" || -n "${CMD_EXE}" ]]; then
     printf '%s\n' "${usbipd_list}"
     echo "usbipd_list_end"
   } >>"${metadata}"
-  busid="$(awk '{
-    for (field = 1; field <= NF; field++) {
-      if (tolower($field) == "3434:0c60") {
-        print $1
-        exit
-      }
-    }
-  }' <<<"${usbipd_list}")"
+  busid="$(usbipd_busid "${usbipd_list}" "${SELECTED_HARDWARE_ID}")"
   if [[ "${busid}" =~ ^[0-9]+-[0-9]+$ ]] &&
      run_usbipd detach --busid "${busid}" >/dev/null 2>&1; then
     echo "usbipd_detached_busid=${busid}" >>"${metadata}"
-    echo "Detached ${busid} from WSL; Windows can use the wired keyboard again."
+    echo "Detached ${SELECTED_HARDWARE_ID} (${busid}) from WSL; Windows can use it again."
   else
     echo "usbipd_detach=failed busid=${busid:-not-found}" >>"${metadata}"
     echo "Could not detach the keyboard; it remains attached to WSL." >&2
