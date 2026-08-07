@@ -45,7 +45,7 @@ index b6776f0..aa53837 100644
      bool "enable ssd1306 display"
      default n
 diff --git a/app/module/drivers/kscan/kscan_gpio_matrix.c b/app/module/drivers/kscan/kscan_gpio_matrix.c
-index 877c0c2..9f8f57f 100644
+index 877c0c2..32e1ec1 100644
 --- a/app/module/drivers/kscan/kscan_gpio_matrix.c
 +++ b/app/module/drivers/kscan/kscan_gpio_matrix.c
 @@ -16,7 +16,9 @@
@@ -606,27 +606,29 @@ index 7821ade..c301185 100644
          // Cancel all current keypresses so keys don't stay held on the old endpoint.
          disconnect_current_endpoint();
          // k_sem_take(&wait_disc,K_FOREVER);
-diff --git a/app/src/hid.c b/app/src/hid.c
-index 9944938..aca4e6d 100644
---- a/app/src/hid.c
-+++ b/app/src/hid.c
+diff --git a/app/src/hid_keychron.c b/app/src/hid_keychron.c
+index 7aa5a74..44a03b1 100644
+--- a/app/src/hid_keychron.c
++++ b/app/src/hid_keychron.c
 @@ -9,6 +9,7 @@
  LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
  
  #include <zmk/hid.h>
 +#include <zmk/dwerty_diag.h>
  #include <dt-bindings/zmk/modifiers.h>
+ #include <zmk/endpoints.h>
  
- static struct zmk_hid_keyboard_report keyboard_report = {
-@@ -55,11 +56,17 @@ int zmk_hid_register_mod(zmk_mod_t modifier) {
+@@ -73,6 +74,9 @@ int zmk_hid_register_mod(zmk_mod_t modifier) {
      WRITE_BIT(explicit_modifiers, modifier, true);
      zmk_mod_flags_t current = GET_MODIFIERS;
      SET_MODIFIERS(explicit_modifiers);
 +    dwerty_diag_record(DWERTY_DIAG_EVENT_MODIFIER, DWERTY_DIAG_FLAG_PRESSED,
 +                       modifier | ((uint16_t)MIN(explicit_modifier_counts[modifier], 255) << 8),
 +                       explicit_modifiers | ((uint16_t)GET_MODIFIERS << 8));
-     return current == GET_MODIFIERS ? 0 : 1;
- }
+ #if CONFIG_ADAPATIVE_NKRO
+     int ret = current == GET_MODIFIERS ? 0 : 1;
+     if (ret)
+@@ -85,6 +89,9 @@ int zmk_hid_register_mod(zmk_mod_t modifier) {
  
  int zmk_hid_unregister_mod(zmk_mod_t modifier) {
      if (explicit_modifier_counts[modifier] <= 0) {
@@ -636,17 +638,17 @@ index 9944938..aca4e6d 100644
          LOG_ERR("Tried to unregister modifier %d too often", modifier);
          return -EINVAL;
      }
-@@ -78,6 +85,9 @@ int zmk_hid_unregister_mod(zmk_mod_t modifier) {
+@@ -103,6 +110,9 @@ int zmk_hid_unregister_mod(zmk_mod_t modifier) {
      }
      zmk_mod_flags_t current = GET_MODIFIERS;
      SET_MODIFIERS(explicit_modifiers);
 +    dwerty_diag_record(DWERTY_DIAG_EVENT_MODIFIER, 0,
 +                       modifier | ((uint16_t)MIN(explicit_modifier_counts[modifier], 255) << 8),
 +                       explicit_modifiers | ((uint16_t)GET_MODIFIERS << 8));
-     return current == GET_MODIFIERS ? 0 : 1;
- }
- 
-@@ -320,6 +330,9 @@ bool zmk_hid_keyboard_is_pressed(zmk_key_t code) {
+ #if CONFIG_ADAPATIVE_NKRO
+     int ret = current == GET_MODIFIERS ? 0 : 1;
+     if (ret)
+@@ -462,6 +472,9 @@ bool zmk_hid_keyboard_is_pressed(zmk_key_t code) {
  }
  
  void zmk_hid_keyboard_clear(void) {
@@ -654,8 +656,8 @@ index 9944938..aca4e6d 100644
 +                       keyboard_report.body.modifiers | ((uint16_t)explicit_modifiers << 8),
 +                       implicit_modifiers | ((uint16_t)masked_modifiers << 8));
      memset(&keyboard_report.body, 0, sizeof(keyboard_report.body));
- }
- 
+     keyboard_report.body._reserved = zmk_nkro_enable ? 1 : 0;
+ #if CONFIG_ADAPATIVE_NKRO
 diff --git a/app/src/keymap.c b/app/src/keymap.c
 index 7387770..1f1615f 100644
 --- a/app/src/keymap.c
