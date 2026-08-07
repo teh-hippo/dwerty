@@ -467,7 +467,11 @@ def run_flash(args):
         print(f"verified CRC32 0x{crc:08x}; image switch sent")
     finally:
         transport.close()
-    print("The keyboard should reboot. Re-run `scdfu.py probe` after it reconnects.")
+    print("The keyboard should reboot.")
+    print(
+        "Under WSL, reattach it with `usbipd attach --wsl --hardware-id 3434:0c60`, "
+        "then re-run `scdfu.py probe`."
+    )
 
 
 def parser():

@@ -68,7 +68,7 @@ cd ultra
 - A live default-layer change must release every held key through the layer active at press time. Tests 5-7 guard morph, Alt/GUI and Ctrl release behaviour.
 - PPT queue overflow must retain the newest HID state; `0004` deliberately drops the oldest queued report instead.
 - Diagnostic changes must stay behind `CONFIG_DWERTY_DIAGNOSTICS`; release firmware must not allocate the trace buffer or run per-scan tracking.
-- Normal software deployment uses wired SC_DFU with the prepared `zmk_ota.bin`; `zmk.bin` is unprepared and `zmk_ota_MP.bin` is for the physical CFU recovery app.
+- Normal software deployment is hardware-verified over wired SC_DFU with the prepared `zmk_ota.bin`; `zmk.bin` is unprepared and `zmk_ota_MP.bin` is for the physical CFU recovery app. usbipd must reattach after the update reboot.
 - Flashing is Realtek DFU (no UF2), verified on hardware: pop the spacebar keycap and hold the button beneath it while plugging in USB to enter DFU (enumerates `0BDA:4762`), then flash the `cfu/` folder with Keychron's `cfudownloadtool` (Windows). `scripts/package.sh` builds that folder: it wraps `zmk.bin` with the fork's x86-only `prepend_header` and Realtek `PackCli` (fetched pinned + SHA256-verified from `rtkconnectivity/rtl87x2g_sdk`, run under `qemu-x86_64` on aarch64), keyed off the committed `ultra/flash_map.ini`.
 
 ## CI & releases

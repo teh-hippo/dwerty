@@ -120,6 +120,14 @@ sudo ./scripts/scdfu.py flash --profile diagnostics
 
 The flasher refuses an unprepared raw image, a model other than `KCZKV68K`, an image larger than the OTA bank, unsupported DFU capabilities, or another process holding a Keychron HID node. Every 16-byte chunk is acknowledged with the keyboard's running CRC. `IMAGE_SWITCH` is sent only after the device verifies the complete staged image.
 
+This path is hardware-verified on the V6 Ultra 8K with wired PID `3434:0C60`. An SC_DFU reboot disconnects USB, so WSL drops its usbipd attachment. Re-run:
+
+```powershell
+usbipd attach --wsl --hardware-id 3434:0c60
+```
+
+The post-flash probe should retain model `KCZKV68K` and show a new build timestamp.
+
 ### Physical recovery
 
 The physical Realtek DFU app remains the recovery path if the application firmware cannot boot or expose SC_DFU:
