@@ -191,10 +191,12 @@ def parse_info(data):
     return result
 
 
-def import_hid():
+def import_hid(required=True):
     try:
         import hid
     except ImportError as error:
+        if not required:
+            return None
         raise SystemExit(
             "The hidapi module is required. Run with "
             "`uv run --with hidapi scripts/diagnostics.py ...`."
@@ -256,7 +258,9 @@ def candidate_devices(vid, pid):
     if direct:
         return direct
 
-    hid = import_hid()
+    hid = import_hid(required=False)
+    if hid is None:
+        return []
     devices = []
     for device in hid.enumerate(vid, pid or 0):
         if pid is None and device["product_id"] not in DEFAULT_PIDS:

@@ -28,6 +28,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORIGINAL_USER="${SUDO_USER:-${USER:-}}"
 ORIGINAL_UID="${SUDO_UID:-$(id -u)}"
 ORIGINAL_GID="${SUDO_GID:-$(id -g)}"
+USBIPD="${DWERTY_USBIPD:-$(command -v usbipd.exe 2>/dev/null || true)}"
+if [[ -z "${USBIPD}" && -x "/mnt/c/Program Files/usbipd-win/usbipd.exe" ]]; then
+  USBIPD="/mnt/c/Program Files/usbipd-win/usbipd.exe"
+fi
 
 if [[ -n "${1:-}" ]]; then
   ULTRA_DIR="$(realpath "$1")"
@@ -44,10 +48,14 @@ else
 fi
 
 if [[ "${EUID}" -ne 0 ]]; then
+  sudo_env=()
   if [[ -n "${DWERTY_CAPTURE_DIR:-}" ]]; then
-    exec sudo env "DWERTY_CAPTURE_DIR=${DWERTY_CAPTURE_DIR}" "$0" "${ULTRA_DIR}"
+    sudo_env+=("DWERTY_CAPTURE_DIR=${DWERTY_CAPTURE_DIR}")
   fi
-  exec sudo "$0" "${ULTRA_DIR}"
+  if [[ -n "${USBIPD}" ]]; then
+    sudo_env+=("DWERTY_USBIPD=${USBIPD}")
+  fi
+  exec sudo env "${sudo_env[@]}" "$0" "${ULTRA_DIR}"
 fi
 
 DIAGNOSTICS="${ULTRA_DIR}/scripts/diagnostics.py"
@@ -67,9 +75,9 @@ mkdir -p "${OUTPUT_DIR}"
 
 device_json="$("${DIAGNOSTICS}" list)"
 if ! grep -q '"usage_page": "ff60"' <<<"${device_json}"; then
-  if command -v usbipd.exe >/dev/null 2>&1; then
+  if [[ -n "${USBIPD}" && -x "${USBIPD}" ]]; then
     echo "Diagnostic HID is not attached; asking usbipd to attach it to WSL..." >&2
-    usbipd.exe attach --wsl --hardware-id 3434:0c60 >/dev/null 2>&1 || true
+    "${USBIPD}" attach --wsl --hardware-id 3434:0c60 >/dev/null 2>&1 || true
     sleep 2
     device_json="$("${DIAGNOSTICS}" list)"
   fi

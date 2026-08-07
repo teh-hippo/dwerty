@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import struct
 import unittest
+from unittest import mock
 
 
 SCRIPT = pathlib.Path(__file__).parents[1] / "scripts" / "diagnostics.py"
@@ -88,6 +89,17 @@ class DiagnosticsProtocolTest(unittest.TestCase):
     def test_recognises_launcher_report_descriptor(self):
         descriptor = b"\x05\x01" + diagnostics.RAW_DESCRIPTOR_SIGNATURE + b"\xa1\x01"
         self.assertIn(diagnostics.RAW_DESCRIPTOR_SIGNATURE, descriptor)
+
+    def test_missing_optional_hidapi_is_not_required_for_listing(self):
+        original_import = __import__
+
+        def import_without_hid(name, *args, **kwargs):
+            if name == "hid":
+                raise ImportError
+            return original_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", side_effect=import_without_hid):
+            self.assertIsNone(diagnostics.import_hid(required=False))
 
 
 if __name__ == "__main__":
