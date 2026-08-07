@@ -35,6 +35,10 @@ sudo scripts/diagnostics.py mark
 # Freeze and dump the ring as JSON Lines after a fault.
 sudo scripts/diagnostics.py dump --output trace.jsonl
 
+# Preferred incident command. It attaches through usbipd when needed, freezes
+# immediately, and writes timestamped trace and metadata files to /mnt/shared.
+scripts/capture-incident.sh
+
 # Capture the independent 2 Mbaud UART2 stream.
 uv run --with pyserial scripts/diagnostics.py serial --port COM5 > uart-trace.jsonl
 ```
@@ -44,6 +48,8 @@ The dump command freezes before reading, so ring indices cannot move during extr
 The ring is ordinary RAM, not retained storage. Do not power-cycle or reboot after a fault. Moving to wired mode without resetting the keyboard should leave the ring available for USB retrieval, but that preservation must be confirmed during the first controlled trial. The dump command freezes before its first read, so diagnostic responses cannot overwrite the captured ring even when extraction uses the 2.4 GHz path.
 
 Trace files contain physical key positions and timing. Treat them as sensitive input data, minimise retention, and do not publish an unreviewed capture.
+
+`scripts/capture-incident.sh` is the field runbook in executable form. It never clears or re-arms the ring. Copy it to another machine if needed, or run the committed copy directly from the repository.
 
 UART2 TX is configured on `P3_0`, with RX on `P3_1`, at 2,000,000 baud. The V6 Ultra shield overlay overrides the base board's UART2 pinctrl, and the generated devicetree resolves TX to pin 24 (`P3_0`). The existing debug GPIO is `GPIOA10`, labelled `P1_2` in the shield overlay. Confirm the physical pads and logic voltage against the board schematic before connecting equipment. Never drive a board signal from a 5 V adaptor.
 

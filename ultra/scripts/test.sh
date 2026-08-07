@@ -41,6 +41,11 @@ CASE="${1:-}"
 
 # Host-side parity: the Ultra DQ pairs must match the Max keymap exactly.
 echo "==> Checking Dvorak->Qwerty parity with max/"
+bash -n \
+  "${ULTRA_DIR}/scripts/build.sh" \
+  "${ULTRA_DIR}/scripts/capture-incident.sh" \
+  "${ULTRA_DIR}/scripts/package.sh" \
+  "${ULTRA_DIR}/scripts/test.sh"
 python3 "${ULTRA_DIR}/tests/parity_dq.py"
 python3 -m unittest discover -s "${ULTRA_DIR}/tests" -p "test_*.py"
 

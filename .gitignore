@@ -10,3 +10,5 @@ ultra/.cache/
 # Transient build logs / container-written config
 *.log
 .gitconfig
+dwerty-incident-*.jsonl
+dwerty-incident-*.txt
