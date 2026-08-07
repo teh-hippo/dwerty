@@ -110,6 +110,9 @@ echo "  ${OUT}/zmk_ota.bin      (Realtek image header)"
 echo "  ${OUT}/zmk_ota_MP.bin   (MP/CFU image)"
 echo "  ${OUT}/cfu/             (CFU offer + payload for cfudownloadtool)"
 echo
+echo "Software update while the current firmware is running:"
+echo "  sudo ${ULTRA_DIR}/scripts/scdfu.py flash --image ${OUT}/zmk_ota.bin"
+echo
 echo "Flash (Windows, voids warranty): pop the spacebar keycap and hold the"
 echo "button beneath it while plugging in USB to enter DFU (enumerates as"
 echo "0BDA:4762 'Keychron usb DFU'), then point cfudownloadtool at ${OUT}/cfu."

@@ -54,6 +54,7 @@ jobs:
           }
           add ultra/build/zmk.bin        "${TAG}-keychron_v6_ultra.bin"
           add ultra/build/zmk.hex        "${TAG}-keychron_v6_ultra.hex"
+          add ultra/build/zmk_ota.bin    "${TAG}-keychron_v6_ultra_scdfu.bin"
           add ultra/build/zmk_ota_MP.bin "${TAG}-keychron_v6_ultra_ota_MP.bin"
           ( cd ultra/build && zip -rq cfu.zip cfu )
           add ultra/build/cfu.zip        "${TAG}-keychron_v6_ultra_cfu.zip"
@@ -65,6 +66,7 @@ jobs:
           path: |
             ultra/build/zmk.bin
             ultra/build/zmk.hex
+            ultra/build/zmk_ota.bin
             ultra/build/zmk_ota_MP.bin
             ultra/build/cfu
           retention-days: 7

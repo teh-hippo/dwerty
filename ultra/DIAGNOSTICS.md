@@ -9,6 +9,7 @@ The trace is compiled out of normal release firmware. The ring-only build adds a
 ```bash
 ./scripts/build.sh --diagnostics
 ./scripts/package.sh --profile diagnostics
+sudo ./scripts/scdfu.py flash --profile diagnostics
 
 # Optional independent UART stream. Use only after the ring-only build because
 # enabling UART changes timing, power and sleep behaviour.

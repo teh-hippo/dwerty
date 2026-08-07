@@ -87,22 +87,48 @@ The 2.4 GHz receiver enumerates separately and has its own firmware. A host even
 
 ## Flashing
 
-The flashing procedure below has previously been used successfully on this board. Flashing self-built firmware voids your warranty; you can always return to stock by reflashing the official firmware from the Keychron Launcher.
+The running firmware exposes Realtek SC_DFU on a dedicated wired USB HID collection. This stages a prepared application image in the OTA temporary bank, verifies its CRC32 and SHA256 integrity header on-device, and only then marks it ready and reboots. It therefore provides the normal software-only update path without removing the spacebar.
 
-The bootloader accepts self-built images. Reading the fork's DFU code (`app/src/dfu/dfu_common.c`), it gates the switch on a SHA256 in the image header plus the 8-byte customer name `KCZKV68K`, with no asymmetric code-signing. The only real snag is tooling: Realtek's `prepend_header` and `PackCli` packers are x86_64-only, so `package.sh` runs them under `qemu-x86_64` on aarch64 hosts (needs `sudo apt-get install qemu-user`).
+The updater accepts self-built images. Reading the fork's DFU code (`app/src/dfu/tdfu.c` and `dfu_common.c`), it gates the switch on the upload CRC32, the SHA256 in the image header and the 8-byte customer name `KCZKV68K`. The only packaging snag is tooling: Realtek's `prepend_header` and `PackCli` packers are x86_64-only, so `package.sh` runs them under `qemu-x86_64` on aarch64 hosts (needs `sudo apt-get install qemu-user`).
 
 ```bash
 ./scripts/build.sh     # compile on the Keychron fork -> ultra/build/zmk.bin
 ./scripts/package.sh   # -> ultra/build/cfu/ (CFU offer + payload), plus zmk_ota*.bin
 ```
 
-`package.sh` fetches Realtek's `PackCli` (pinned and SHA256-verified from rtkconnectivity's public SDK), wraps the image with `prepend_header`, and packs the `cfu/` folder (`_ImgPacketFile.offer.bin` + `.payload.bin`) that `cfudownloadtool` flashes. The `flash_map.ini` layout lives in this repo.
+`package.sh` fetches Realtek's `PackCli` (pinned and SHA256-verified from rtkconnectivity's public SDK), wraps the image with `prepend_header`, and packs the `cfu/` folder (`_ImgPacketFile.offer.bin` + `.payload.bin`) that `cfudownloadtool` flashes. The `flash_map.ini` layout lives in this repo. SC_DFU must receive `zmk_ota.bin`, not raw `zmk.bin` or the CFU-specific `zmk_ota_MP.bin`.
 
-To flash on Windows:
+### Software-only update
+
+Connect the keyboard directly by USB and select wired mode. Under WSL, attach the USB device first from an elevated Windows terminal:
+
+```powershell
+usbipd list
+usbipd bind --busid <BUSID>       # one-time
+usbipd attach --wsl --busid <BUSID>
+```
+
+Then identify the keyboard read-only and flash the selected packaged profile:
+
+```bash
+sudo ./scripts/scdfu.py probe
+
+./scripts/build.sh --diagnostics
+./scripts/package.sh --profile diagnostics
+sudo ./scripts/scdfu.py flash --profile diagnostics
+```
+
+The flasher refuses an unprepared raw image, a model other than `KCZKV68K`, an image larger than the OTA bank, unsupported DFU capabilities, or another process holding a Keychron HID node. Every 16-byte chunk is acknowledged with the keyboard's running CRC. `IMAGE_SWITCH` is sent only after the device verifies the complete staged image.
+
+### Physical recovery
+
+The physical Realtek DFU app remains the recovery path if the application firmware cannot boot or expose SC_DFU:
 
 1. Pop off the spacebar keycap and hold the button beneath it while plugging in the USB cable. The keyboard enters DFU and enumerates as `0BDA:4762` "Keychron usb DFU".
 2. Point Keychron's `cfudownloadtool` at the `cfu` folder (locally, or the unzipped `*_cfu.zip` from a release) and download.
 3. The board reboots into the new firmware.
+
+There is no power-on key chord for the independent recovery app. It samples the dedicated `P2_5` hardware input during reset. The keymap contains an unused generic ZMK `&bootloader` behaviour, but that emits the nRF/UF2 reset reason and is not a proven RTL8762G recovery mechanism, so it is deliberately not bound.
 
 ## Releases
 
@@ -111,7 +137,8 @@ Releases are published per keyboard from a Git tag. The V6 Ultra uses **`ultra-v
 Each `ultra-v*` tag runs the behaviour tests, builds the firmware on the Keychron fork, packs the CFU folder, and publishes a release with these assets:
 
 - `*-keychron_v6_ultra_cfu.zip`: the CFU offer + payload folder to flash with `cfudownloadtool` (see above).
-- `*-keychron_v6_ultra.bin` / `.hex`: the raw compiled image.
+- `*-keychron_v6_ultra_scdfu.bin`: the prepared application image for `scripts/scdfu.py`.
+- `*-keychron_v6_ultra.bin` / `.hex`: raw build artefacts, not accepted by SC_DFU.
 - `*-keychron_v6_ultra_ota_MP.bin`: the Realtek MP/CFU image.
 - a `.sha256` for each.
 
