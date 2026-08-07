@@ -51,7 +51,7 @@ The fork drives one column high at a time and samples the row inputs. The incide
 
 | Event | Evidence |
 |---|---|
-| `matrix_raw` | A sampled electrical matrix state changed before debounce. |
+| `matrix_raw` | A sampled electrical matrix state changed before debounce, reported in logical row/column orientation. |
 | `kscan` | The debouncer emitted a row and column transition. |
 | `position` | The matrix transform produced a ZMK position. |
 | `keymap` | The position entered keymap resolution with its press-time default and active layer state. |

@@ -59,6 +59,7 @@ def apply_patches(zmk, fork_revision, ultra):
 
         return {
             "keymap": (root / "app/src/keymap.c").read_text(),
+            "matrix": (root / "app/module/drivers/kscan/kscan_gpio_matrix.c").read_text(),
             "ppt": (root / "app/src/ppt/ppt_send.c").read_text(),
             "diag": (root / "app/src/dwerty_diag.c").read_text(),
             "diag_header": (root / "app/module/include/zmk/dwerty_diag.h").read_text(),
@@ -218,6 +219,8 @@ def main():
     assert "raw_hid_send(data, length);" in patched["diag"]
     assert "#define dwerty_diag_record(...) ((void)0)" in patched["diag_header"]
     assert "#define dwerty_diag_record_hid(...) ((void)0)" in patched["diag_header"]
+    assert "dwerty_diag_raw_matrix(col, in_gpio->index, active);" in patched["matrix"]
+    assert "dwerty_diag_raw_matrix(in_gpio->index, col, active);" not in patched["matrix"]
     print(
         "Source invariants OK: fork mod-morph and release routing match "
         "upstream base; all fork patches apply; PPT queue overflow and "
