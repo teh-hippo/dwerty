@@ -45,7 +45,9 @@ bash -n \
   "${ULTRA_DIR}/scripts/build.sh" \
   "${ULTRA_DIR}/scripts/capture-incident.sh" \
   "${ULTRA_DIR}/scripts/package.sh" \
-  "${ULTRA_DIR}/scripts/test.sh"
+  "${ULTRA_DIR}/scripts/test.sh" \
+  "${ULTRA_DIR}/tests/test_capture_incident.sh"
+bash "${ULTRA_DIR}/tests/test_capture_incident.sh"
 python3 "${ULTRA_DIR}/tests/parity_dq.py"
 python3 -m unittest discover -s "${ULTRA_DIR}/tests" -p "test_*.py"
 
