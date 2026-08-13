@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import struct
+import time
 import unittest
 from unittest import mock
 
@@ -9,6 +10,69 @@ SCRIPT = pathlib.Path(__file__).parents[1] / "scripts" / "diagnostics.py"
 SPEC = importlib.util.spec_from_file_location("diagnostics", SCRIPT)
 diagnostics = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(diagnostics)
+
+
+class FakeHidDevice:
+    """A hidapi device that ignores the first `dropped` commands it receives."""
+
+    def __init__(self, dropped):
+        self.dropped = dropped
+        self.writes = 0
+        self._pending = None
+
+    def open_path(self, path):
+        self.path = path
+
+    def close(self):
+        self._pending = None
+
+    def write(self, report):
+        self.writes += 1
+        if self.writes > self.dropped:
+            response = bytearray(diagnostics.REPORT_SIZE)
+            response[0] = diagnostics.COMMAND
+            response[1] = report[2]
+            self._pending = bytes(response)
+        return len(report)
+
+    def read(self, size, timeout_ms):
+        if self._pending is None:
+            time.sleep(timeout_ms / 1000)
+            return b""
+        pending, self._pending = self._pending, None
+        return pending
+
+
+def open_fake_device(fake, timeout_ms):
+    module = mock.Mock()
+    module.device.return_value = fake
+    with mock.patch.object(diagnostics, "import_hid", return_value=module):
+        return diagnostics.DiagnosticDevice({"path": "fake"}, timeout_ms)
+
+
+class StaleReadDevice(FakeHidDevice):
+    """A device whose first read reply echoes an earlier record index."""
+
+    def __init__(self):
+        super().__init__(dropped=0)
+        self.replies = []
+
+    def write(self, report):
+        self.writes += 1
+        requested = struct.unpack_from("<H", bytes(report), 3)[0]
+        echoed = 0 if self.writes == 1 else requested
+        response = bytearray(diagnostics.REPORT_SIZE)
+        response[0] = diagnostics.COMMAND
+        response[1] = report[2]
+        struct.pack_into("<H", response, 4, echoed)
+        self.replies.append(bytes(response))
+        return len(report)
+
+    def read(self, size, timeout_ms):
+        if not self.replies:
+            time.sleep(timeout_ms / 1000)
+            return b""
+        return self.replies.pop(0)
 
 
 class DiagnosticsProtocolTest(unittest.TestCase):
@@ -100,6 +164,31 @@ class DiagnosticsProtocolTest(unittest.TestCase):
 
         with mock.patch("builtins.__import__", side_effect=import_without_hid):
             self.assertIsNone(diagnostics.import_hid(required=False))
+
+    def test_retransmits_a_command_that_a_settling_link_dropped(self):
+        fake = FakeHidDevice(dropped=2)
+        device = open_fake_device(fake, 2000)
+        with mock.patch.object(diagnostics, "RETRY_INTERVAL_MS", 20):
+            response = device.exchange("freeze")
+        self.assertEqual(fake.writes, 3)
+        self.assertEqual(response[0], diagnostics.COMMAND)
+        self.assertEqual(response[1], diagnostics.SUBCOMMANDS["freeze"])
+
+    def test_reports_a_timeout_when_the_device_never_answers(self):
+        fake = FakeHidDevice(dropped=100)
+        device = open_fake_device(fake, 100)
+        with mock.patch.object(diagnostics, "RETRY_INTERVAL_MS", 20):
+            with self.assertRaises(RuntimeError):
+                device.exchange("info")
+        self.assertGreater(fake.writes, 1)
+
+    def test_rejects_a_read_reply_for_another_index(self):
+        fake = StaleReadDevice()
+        device = open_fake_device(fake, 2000)
+        with mock.patch.object(diagnostics, "RETRY_INTERVAL_MS", 20):
+            response = device.exchange("read", 4)
+        self.assertEqual(fake.writes, 2)
+        self.assertEqual(struct.unpack_from("<H", response, 4)[0], 4)
 
 
 if __name__ == "__main__":

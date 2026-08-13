@@ -13,6 +13,11 @@ ULTRA_DIR is detected from this script, the current directory, or
 ~/dwerty/ultra for the invoking user. Captures go to /mnt/shared when
 available, or the current directory. Set DWERTY_CAPTURE_DIR to override.
 
+A candidate interface is used only once it answers a diagnostic command, so a
+receiver whose keyboard link is down is rejected rather than silently timing
+out. Set DWERTY_SETTLE_SECONDS to change how long a freshly attached device is
+given to answer.
+
 After validating the saved trace, the default is to clear and re-arm the
 diagnostic ring, then detach the wired keyboard from WSL so Windows can use it.
 Use --keep-frozen to preserve the in-device trace, or --keep-attached to leave
@@ -111,6 +116,35 @@ diagnostic_list() {
   "${DIAGNOSTICS}" --vid "0x${vid}" --pid "0x${pid}" list
 }
 
+diagnostic_probe() {
+  local hardware_id="$1"
+  local vid="${hardware_id%:*}"
+  local pid="${hardware_id#*:}"
+  "${DIAGNOSTICS}" --vid "0x${vid}" --pid "0x${pid}" info
+}
+
+# An enumerated interface only proves that the receiver is present. A receiver
+# whose keyboard link is down still exposes the descriptor while answering
+# nothing, so a candidate is accepted only once it replies.
+diagnostic_ready() {
+  local hardware_id="$1"
+  local settle="$2"
+  local deadline=$((SECONDS + settle))
+  local candidate_json=""
+  while true; do
+    candidate_json="$(diagnostic_list "${hardware_id}" 2>/dev/null || true)"
+    if grep -qE '"usage_page"[[:space:]]*:[[:space:]]*"ff60"' <<<"${candidate_json}" &&
+       diagnostic_probe "${hardware_id}" >/dev/null 2>&1; then
+      printf '%s\n' "${candidate_json}"
+      return 0
+    fi
+    if [[ "${SECONDS}" -ge "${deadline}" ]]; then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 usbipd_busid() {
   local usbipd_list="$1"
   local hardware_id="$2"
@@ -148,6 +182,9 @@ if [[ "${EUID}" -ne 0 && "${DWERTY_CAPTURE_TEST_MODE:-0}" != "1" ]]; then
   if [[ -n "${DWERTY_CAPTURE_DIR:-}" ]]; then
     sudo_env+=("DWERTY_CAPTURE_DIR=${DWERTY_CAPTURE_DIR}")
   fi
+  if [[ -n "${DWERTY_SETTLE_SECONDS:-}" ]]; then
+    sudo_env+=("DWERTY_SETTLE_SECONDS=${DWERTY_SETTLE_SECONDS}")
+  fi
   if [[ -n "${USBIPD}" ]]; then
     sudo_env+=("DWERTY_USBIPD=${USBIPD}")
   fi
@@ -181,6 +218,26 @@ else
 fi
 mkdir -p "${OUTPUT_DIR}"
 
+ATTACHED_BUSID=""
+TEMPORARY=""
+SETTLE_SECONDS="${DWERTY_SETTLE_SECONDS:-20}"
+
+# A failed capture must not strand the keyboard in WSL, where Windows cannot
+# use it and the next attempt has to start by reattaching it.
+cleanup() {
+  local status=$?
+  if [[ -n "${TEMPORARY}" ]]; then
+    rm -f "${TEMPORARY}"
+  fi
+  if [[ "${status}" -ne 0 && "${KEEP_ATTACHED}" != "1" && -n "${ATTACHED_BUSID}" ]]; then
+    if run_usbipd detach --busid "${ATTACHED_BUSID}" >/dev/null 2>&1; then
+      echo "Detached ${ATTACHED_BUSID} from WSL after the failed capture." >&2
+    fi
+  fi
+  return "${status}"
+}
+trap cleanup EXIT
+
 CANDIDATE_IDS=()
 if [[ -n "${HARDWARE_ID}" ]]; then
   CANDIDATE_IDS=("${HARDWARE_ID}")
@@ -193,8 +250,7 @@ fi
 SELECTED_HARDWARE_ID=""
 device_json=""
 for candidate in "${CANDIDATE_IDS[@]}"; do
-  candidate_json="$(diagnostic_list "${candidate}")"
-  if grep -qE '"usage_page"[[:space:]]*:[[:space:]]*"ff60"' <<<"${candidate_json}"; then
+  if candidate_json="$(diagnostic_ready "${candidate}" 0)"; then
     SELECTED_HARDWARE_ID="${candidate}"
     device_json="${candidate_json}"
     break
@@ -210,20 +266,22 @@ if [[ -z "${SELECTED_HARDWARE_ID}" && ( -n "${USBIPD}" || -n "${CMD_EXE}" ) ]]; 
     fi
     echo "Attaching ${candidate} (${candidate_busid}) to WSL for diagnostic capture..." >&2
     run_usbipd attach --wsl --busid "${candidate_busid}" >/dev/null 2>&1 || true
-    sleep 2
-    candidate_json="$(diagnostic_list "${candidate}")"
-    if grep -qE '"usage_page"[[:space:]]*:[[:space:]]*"ff60"' <<<"${candidate_json}"; then
+    ATTACHED_BUSID="${candidate_busid}"
+    if candidate_json="$(diagnostic_ready "${candidate}" "${SETTLE_SECONDS}")"; then
       SELECTED_HARDWARE_ID="${candidate}"
       device_json="${candidate_json}"
       break
     fi
     run_usbipd detach --busid "${candidate_busid}" >/dev/null 2>&1 || true
+    ATTACHED_BUSID=""
   done
 fi
 
 if [[ -z "${SELECTED_HARDWARE_ID}" ]]; then
-  echo "No supported diagnostic HID interface found." >&2
+  echo "No supported diagnostic HID interface answered." >&2
   echo "Known defaults: 3434:d028 (receiver), 3434:0c60 (wired)." >&2
+  echo "A receiver enumerates even when its keyboard link is down; press a key" >&2
+  echo "to wake the link, or capture on the transport the keyboard is using." >&2
   echo "Override with: --hardware-id VID:PID" >&2
   exit 1
 fi
@@ -231,16 +289,15 @@ fi
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 capture="${OUTPUT_DIR}/dwerty-incident-${timestamp}.jsonl"
 metadata="${OUTPUT_DIR}/dwerty-incident-${timestamp}.txt"
-temporary="$(mktemp "${OUTPUT_DIR}/.dwerty-incident.XXXXXX")"
-trap 'rm -f "${temporary}"' EXIT
+TEMPORARY="$(mktemp "${OUTPUT_DIR}/.dwerty-incident.XXXXXX")"
 
 echo "Freezing diagnostic state and writing ${capture}..." >&2
 vid="${SELECTED_HARDWARE_ID%:*}"
 pid="${SELECTED_HARDWARE_ID#*:}"
 DIAGNOSTIC_ARGS=(--vid "0x${vid}" --pid "0x${pid}")
-"${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${temporary}"
-mv "${temporary}" "${capture}"
-trap - EXIT
+"${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${TEMPORARY}"
+mv "${TEMPORARY}" "${capture}"
+TEMPORARY=""
 
 validation="$(python3 - "${capture}" <<'PY'
 import json

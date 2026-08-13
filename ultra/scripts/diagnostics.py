@@ -20,6 +20,7 @@ RAW_USAGE = 0x61
 RAW_DESCRIPTOR_SIGNATURE = b"\x06\x60\xff\x09\x61"
 COMMAND = 0xD0
 REPORT_SIZE = 32
+RETRY_INTERVAL_MS = 250
 RECORD_FORMAT = "<HBBIHH"
 RECORD_SIZE = struct.calcsize(RECORD_FORMAT)
 UART_MAGIC = b"\xD7\x59"
@@ -191,6 +192,15 @@ def parse_info(data):
     return result
 
 
+def echoes_request(subcommand, value, response):
+    """Reject a stale reply that a retransmission or a slow link duplicated."""
+    if subcommand == "read":
+        return struct.unpack_from("<H", response, 4)[0] == value
+    if subcommand == "mark":
+        return struct.unpack_from("<I", response, 27)[0] == value
+    return True
+
+
 def import_hid(required=True):
     try:
         import hid
@@ -350,10 +360,18 @@ class DiagnosticDevice:
             struct.pack_into("<I", request, 2, value)
         else:
             struct.pack_into("<H", request, 2, value)
-        self._write(request)
         deadline = time.monotonic() + self._timeout_ms / 1000
-        while time.monotonic() < deadline:
-            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+        next_write = 0.0
+        while True:
+            now = time.monotonic()
+            if now >= deadline:
+                raise RuntimeError("timed out waiting for a matching diagnostic response")
+            # A command sent while the link is still settling is dropped without
+            # an error, so retransmit until the deadline expires.
+            if now >= next_write:
+                self._write(request)
+                next_write = now + RETRY_INTERVAL_MS / 1000
+            remaining_ms = max(1, int((min(next_write, deadline) - time.monotonic()) * 1000))
             response = bytes(self._read(remaining_ms))
             if len(response) == REPORT_SIZE + 1 and response[0] == 0:
                 response = response[1:]
@@ -361,9 +379,9 @@ class DiagnosticDevice:
                 len(response) == REPORT_SIZE
                 and response[0] == COMMAND
                 and response[1] == SUBCOMMANDS[subcommand]
+                and echoes_request(subcommand, value, response)
             ):
                 return response
-        raise RuntimeError("timed out waiting for a matching diagnostic response")
 
 
 def open_selected(args):
