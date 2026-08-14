@@ -2,7 +2,10 @@
 
 The diagnostic build records the stages that can turn a physical key transition into a Windows modifier state. It is intended for a future controlled investigation. Nothing in this document requires touching or flashing deployed hardware now.
 
-The trace is compiled out of normal release firmware. The ring-only build adds a 512-record RAM buffer and a private command on the existing Keychron Launcher raw HID interface. The UART build also streams the same records independently on UART2 from a dedicated low-priority thread.
+The trace is compiled out of normal release firmware. The ring-only build adds
+a 1024-record RAM buffer and a private command on the existing Keychron
+Launcher raw HID interface. The UART build also streams the same records
+independently on UART2 from a dedicated low-priority thread.
 
 Capture begins automatically when diagnostic firmware boots. `arm` clears the ring and establishes sequence zero; it does not enable tracing. Normal release firmware contains no trace buffer or diagnostic command. Diagnostic records remain only in RAM and are not transmitted until requested, but they contain physical key positions and timing and should be treated as sensitive input data.
 
@@ -35,6 +38,9 @@ sudo scripts/diagnostics.py mark
 # Freeze and dump the ring as JSON Lines after a fault.
 sudo scripts/diagnostics.py dump --output trace.jsonl
 
+# Validate raw-slot, decoded-event, anchor and sequence accounting.
+scripts/diagnostics.py validate trace.jsonl
+
 # Preferred incident command. It attaches through usbipd when needed, freezes
 # immediately, validates and saves the trace, re-arms, then detaches from WSL.
 scripts/capture-incident.sh
@@ -52,19 +58,62 @@ scripts/capture-incident.sh --keep-attached
 uv run --with pyserial scripts/diagnostics.py serial --port COM5 > uart-trace.jsonl
 ```
 
-The dump command freezes before reading, so ring indices cannot move during extraction. The trace also freezes on kscan overflow, PPT overflow, PPT send failure and modifier-count underflow. A report containing four or more modifier bits arms a short post-trigger window, allowing the following queue and send records to be retained before the ring freezes.
+The dump command freezes before reading, so ring indices cannot move during
+extraction. The trace also freezes on kscan overflow, PPT overflow, PPT send
+failure and modifier-count underflow. A report containing five or more
+modifier bits arms a short post-trigger window, allowing the following queue
+and send records to be retained before the ring freezes. A modifier held for
+10 seconds freezes the ring from a timer, so a quiet latch does not require
+another key event.
 
 The ring is ordinary RAM, not retained storage. Do not power-cycle or reboot after a fault. Changing transport is equally destructive: unplugging the USB cable resets the keyboard and clears the ring. This was measured on hardware. A wired capture reported an uptime of 286 seconds, and a 2.4 GHz capture 143 seconds later reported an uptime of 18.5 seconds with an explicit `boot` record at 184 ms and a sequence counter restarted from zero. Always capture on whichever transport is already live when the fault appears, and never plug in a cable to obtain a more convenient connection. The reverse direction, attaching the cable while the keyboard runs on 2.4 GHz, has not been measured and should be assumed to reset the device until it is. The dump command freezes before its first read, so diagnostic responses cannot overwrite the captured ring even when extraction uses the 2.4 GHz path.
 
-The ring is small relative to typing. One key transition costs eight records on the 2.4 GHz path, a modifier transition costs a ninth, and 512 records therefore hold roughly 32 typed characters. This was measured on hardware: entering the 35-character `./ultra/scripts/capture-incident.sh` produced 62 debounced transitions and consumed 496 of the 512 records, leaving a capture that contained only the command entry and the freeze it requested. Collect the trace from a second keyboard or from another host. Typing the collection command on the keyboard under investigation destroys the window it is meant to preserve.
+The ring is small relative to typing. One key transition costs about eight
+records on the 2.4 GHz path and a modifier transition costs another record.
+The 1024-slot protocol-2 ring holds roughly 60 typed characters after allowing
+for periodic timing anchors. Collect the trace from a second keyboard or from
+another host. Typing the collection command on the keyboard under
+investigation destroys the window it is meant to preserve.
 
 Bind the capture to a pointer-driven launcher so that collecting it costs no keystrokes at all. A Windows desktop shortcut targeting `cmd.exe /k wsl.exe -d <distribution> -- <path>/ultra/scripts/capture-incident.sh` reduces an incident capture to a double-click, and `/k` holds the result on screen until the window is closed with the mouse. Point `DWERTY_CAPTURE_DIR` at the same folder as the host-side evidence so the firmware trace and the Windows captures can be correlated by timestamp.
 
 Trace files contain physical key positions and timing. Treat them as sensitive input data, minimise retention, and do not publish an unreviewed capture.
 
-`scripts/capture-incident.sh` is the field runbook in executable form. It recognises the known V6 Ultra wired PID `3434:0C60` and receiver PID `3434:D028`, preferring the receiver so a wireless trace can be retrieved without switching keyboard transport, which would reset the device and destroy the trace. These are verified defaults for this hardware, not a universal registry of Keychron receiver IDs. `--hardware-id VID:PID` supports an explicit or future device. usbipd still requires a one-time elevated `bind` for each Windows USB device before WSL can attach it. Given that one-time bind, the attach, capture and detach cycle needs no manual usbipd step, verified on hardware over both the wired and receiver paths. The script validates the complete JSONL file before re-arming, then detaches the selected device so Windows regains access. Use `--keep-frozen` when the in-device copy must remain untouched.
+`scripts/capture-incident.sh` is the field runbook in executable form. It
+recognises the known V6 Ultra wired PID `3434:0C60` and receiver PID
+`3434:D028`, preferring the receiver so a wireless trace can be retrieved
+without switching keyboard transport, which would reset the device and destroy
+the trace. These are verified defaults for this hardware, not a universal
+registry of Keychron receiver IDs. `--hardware-id VID:PID` supports an
+explicit or future device. usbipd still requires a one-time elevated `bind`
+for each Windows USB device before WSL can attach it. Given that one-time bind,
+the attach, capture and detach cycle needs no manual usbipd step, verified on
+hardware over both the wired and receiver paths.
 
-A candidate interface is selected only once it answers a diagnostic `info` command. Attaching or detaching the receiver through usbipd drops and re-establishes the keyboard's PPT link, measured on hardware as a `ppt_state` transition to disconnected and back 775 ms after a detach, and the receiver keeps exposing its raw HID interface throughout. Descriptor enumeration therefore cannot show that the keyboard is reachable, and selecting on it strands the capture on a path that forwards nothing. A freshly attached interface is given `DWERTY_SETTLE_SECONDS`, 20 by default, to answer, and each diagnostic command is retransmitted while that timeout runs, so a report lost while the link settles costs a retry instead of the capture. A `read` reply is accepted only when it echoes the requested record index, which keeps a duplicated or late reply from being decoded as a different part of the ring. A capture that fails after attaching detaches the device again, because a stranded keyboard is unusable in Windows and the next attempt would begin by reattaching it.
+The collector uses `diagnostics.py validate` before re-arming. The firmware
+header counts raw slots, while decoded protocol-2 JSON omits `time_skip`
+anchors, so a complete capture satisfies
+`raw_slots = decoded_records + time_skip_records`. A validation failure
+preserves the JSONL, writes a status sidecar, leaves the ring frozen and
+detaches the selected device from WSL. Use `--keep-frozen` when a successful
+capture's in-device copy must remain untouched. The sidecar records the source
+commit and whether the working tree was dirty.
+
+A candidate interface is selected only once it answers a diagnostic `info`
+command. Attaching or detaching the receiver through usbipd drops and
+re-establishes the keyboard's PPT link, measured on hardware as a `ppt_state`
+transition to disconnected and back 775 ms after a detach, and the receiver
+keeps exposing its raw HID interface throughout. Descriptor enumeration
+therefore cannot show that the keyboard is reachable, and selecting on it
+strands the capture on a path that forwards nothing. A freshly attached
+interface is given `DWERTY_SETTLE_SECONDS`, 20 by default, to answer, and each
+diagnostic command is retransmitted while that timeout runs, so a report lost
+while the link settles costs a retry instead of the capture. A `read` reply is
+accepted only when it echoes the requested record index, which keeps a
+duplicated or late reply from being decoded as a different part of the ring. A
+capture that fails after attaching writes the available status and detaches
+the device again, because a stranded keyboard is unusable in Windows and the
+next attempt would begin by reattaching it.
 
 UART2 TX is configured on `P3_0`, with RX on `P3_1`, at 2,000,000 baud. The V6 Ultra shield overlay overrides the base board's UART2 pinctrl, and the generated devicetree resolves TX to pin 24 (`P3_0`). The existing debug GPIO is `GPIOA10`, labelled `P1_2` in the shield overlay. Confirm the physical pads and logic voltage against the board schematic before connecting equipment. Never drive a board signal from a 5 V adaptor.
 

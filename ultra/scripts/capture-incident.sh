@@ -214,6 +214,15 @@ if [[ ! -x "${DIAGNOSTICS}" ]]; then
   echo "Missing executable ${DIAGNOSTICS}" >&2
   exit 2
 fi
+repository_commit="$(git -C "${ULTRA_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+repository_dirty="unknown"
+if git -C "${ULTRA_DIR}" status --porcelain >/dev/null 2>&1; then
+  if [[ -n "$(git -C "${ULTRA_DIR}" status --porcelain)" ]]; then
+    repository_dirty="true"
+  else
+    repository_dirty="false"
+  fi
+fi
 
 if [[ -n "${DWERTY_CAPTURE_DIR:-}" ]]; then
   OUTPUT_DIR="${DWERTY_CAPTURE_DIR}"
@@ -226,18 +235,41 @@ mkdir -p "${OUTPUT_DIR}"
 
 ATTACHED_BUSID=""
 TEMPORARY=""
+capture=""
+metadata=""
 SETTLE_SECONDS="${DWERTY_SETTLE_SECONDS:-20}"
+
+secure_output_files() {
+  local file
+  for file in "${capture}" "${metadata}"; do
+    if [[ -n "${file}" && -f "${file}" ]]; then
+      chmod 0600 "${file}"
+      if [[ -n "${SUDO_UID:-}" ]]; then
+        chown "${ORIGINAL_UID}:${ORIGINAL_GID}" "${file}"
+      fi
+    fi
+  done
+}
 
 # A failed capture must not strand the keyboard in WSL, where Windows cannot
 # use it and the next attempt has to start by reattaching it.
 cleanup() {
   local status=$?
+  local detach_busid="${ATTACHED_BUSID}"
   if [[ -n "${TEMPORARY}" ]]; then
     rm -f "${TEMPORARY}"
   fi
-  if [[ "${status}" -ne 0 && "${KEEP_ATTACHED}" != "1" && -n "${ATTACHED_BUSID}" ]]; then
-    if run_usbipd detach --busid "${ATTACHED_BUSID}" >/dev/null 2>&1; then
-      echo "Detached ${ATTACHED_BUSID} from WSL after the failed capture." >&2
+  if [[ "${status}" -ne 0 && "${KEEP_ATTACHED}" != "1" ]]; then
+    if [[ -z "${detach_busid}" && -n "${SELECTED_HARDWARE_ID:-}" ]]; then
+      current_usbipd_list="$(run_usbipd list 2>/dev/null | tr -d '\r' || true)"
+      detach_busid="$(usbipd_busid "${current_usbipd_list}" "${SELECTED_HARDWARE_ID}")"
+    fi
+    if [[ "${detach_busid}" =~ ^[0-9]+-[0-9]+$ ]] &&
+       run_usbipd detach --busid "${detach_busid}" >/dev/null 2>&1; then
+      if [[ -n "${metadata}" && -f "${metadata}" ]]; then
+        echo "usbipd_detached_after_failure=${detach_busid}" >>"${metadata}"
+      fi
+      echo "Detached ${detach_busid} from WSL after the failed capture." >&2
     fi
   fi
   return "${status}"
@@ -301,43 +333,88 @@ echo "Freezing diagnostic state and writing ${capture}..." >&2
 vid="${SELECTED_HARDWARE_ID%:*}"
 pid="${SELECTED_HARDWARE_ID#*:}"
 DIAGNOSTIC_ARGS=(--vid "0x${vid}" --pid "0x${pid}")
-"${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${TEMPORARY}"
+set +e
+dump_error="$("${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${TEMPORARY}" 2>&1)"
+dump_status=$?
+set -e
+if [[ "${dump_status}" -ne 0 ]]; then
+  # A dump writes the info header before it reads any records, so a link that
+  # drops part way through still leaves the freeze reason and ring counts.
+  preserved="false"
+  if [[ -s "${TEMPORARY}" ]]; then
+    mv "${TEMPORARY}" "${capture}"
+    TEMPORARY=""
+    preserved="true"
+  fi
+  {
+    echo "capture_utc=${timestamp}"
+    echo "host=$(hostname)"
+    echo "ultra_dir=${ULTRA_DIR}"
+    echo "repository_commit=${repository_commit}"
+    echo "repository_dirty=${repository_dirty}"
+    echo "hardware_id=${SELECTED_HARDWARE_ID}"
+    echo "device=${device_json}"
+    echo "capture_status=dump_failed"
+    echo "capture_preserved=${preserved}"
+    if [[ "${preserved}" == "true" ]]; then
+      echo "capture_path=${capture}"
+      echo "capture_partial=true"
+      echo "capture_validated=false"
+      echo "header=$(head -n 1 "${capture}")"
+    fi
+    echo "ring_rearmed=false"
+    echo "ring_remains_frozen=unknown"
+    echo "failure_type=dump"
+    echo "dump_error_begin"
+    printf '%s\n' "${dump_error}"
+    echo "dump_error_end"
+  } >"${metadata}"
+  secure_output_files
+  echo "Diagnostic dump failed; status saved to ${metadata}." >&2
+  if [[ "${preserved}" == "true" ]]; then
+    echo "Kept the partial trace at ${capture}; it was not validated." >&2
+  fi
+  exit "${dump_status}"
+fi
 mv "${TEMPORARY}" "${capture}"
 TEMPORARY=""
 
-validation="$(python3 - "${capture}" <<'PY'
-import json
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-if not lines:
-    raise SystemExit("capture is empty")
-objects = [json.loads(line) for line in lines]
-header = objects[0]
-if header.get("kind") != "info" or not header.get("frozen"):
-    raise SystemExit("capture does not contain a frozen diagnostic header")
-expected = header.get("count")
-actual = sum(item.get("kind") == "record" for item in objects[1:])
-if not isinstance(expected, int) or actual != expected:
-    raise SystemExit(f"capture record count mismatch: header={expected}, file={actual}")
-print(f"validated_records={actual}")
-PY
-)"
+set +e
+validation="$("${DIAGNOSTICS}" validate "${capture}" 2>&1)"
+validation_status=$?
+set -e
 
 {
   echo "capture_utc=${timestamp}"
   echo "host=$(hostname)"
   echo "ultra_dir=${ULTRA_DIR}"
-  echo "repository_commit=$(git -C "${ULTRA_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "repository_commit=${repository_commit}"
+  echo "repository_dirty=${repository_dirty}"
   echo "hardware_id=${SELECTED_HARDWARE_ID}"
   echo "device=${device_json}"
   echo "header=$(head -n 1 "${capture}")"
   echo "schema_command=${DIAGNOSTICS} schema"
   echo "analyse_command=${DIAGNOSTICS} analyse ${capture}"
-  echo "${validation}"
+  echo "validation_command=${DIAGNOSTICS} validate ${capture}"
+  if [[ "${validation_status}" -eq 0 ]]; then
+    echo "capture_status=validated"
+  else
+    echo "capture_status=validation_failed"
+    echo "ring_rearmed=false"
+    echo "ring_remains_frozen=true"
+    echo "failure_type=validation"
+  fi
+  echo "validation_begin"
+  printf '%s\n' "${validation}"
+  echo "validation_end"
 } >"${metadata}"
+
+if [[ "${validation_status}" -ne 0 ]]; then
+  secure_output_files
+  echo "Capture preserved but validation failed; the diagnostic ring remains frozen." >&2
+  echo "Review ${metadata} before re-arming." >&2
+  exit "${validation_status}"
+fi
 
 echo
 echo "Captured:"
@@ -361,10 +438,14 @@ if [[ -n "${analysis}" ]]; then
 fi
 
 if [[ "${KEEP_FROZEN}" == "1" ]]; then
+  echo "ring_rearmed=false" >>"${metadata}"
+  echo "ring_remains_frozen=true" >>"${metadata}"
   echo "Diagnostic ring left frozen (--keep-frozen)." | tee -a "${metadata}"
 else
   rearm_json="$("${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" arm)"
   echo "rearm=${rearm_json}" >>"${metadata}"
+  echo "ring_rearmed=true" >>"${metadata}"
+  echo "ring_remains_frozen=false" >>"${metadata}"
   echo "Diagnostic ring cleared and re-armed."
 fi
 
@@ -389,7 +470,4 @@ elif [[ -n "${USBIPD}" || -n "${CMD_EXE}" ]]; then
   fi
 fi
 
-chmod 0600 "${capture}" "${metadata}"
-if [[ -n "${SUDO_UID:-}" ]]; then
-  chown "${ORIGINAL_UID}:${ORIGINAL_GID}" "${capture}" "${metadata}"
-fi
+secure_output_files

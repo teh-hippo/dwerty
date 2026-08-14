@@ -14,11 +14,13 @@ make_fixture() {
 pid=""
 command=""
 output=""
+capture=""
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --pid) pid="$2"; shift ;;
-    list|arm|dump|info) command="$1" ;;
+    list|arm|dump|info|validate|analyse) command="$1" ;;
     --output) output="$2"; shift ;;
+    *) [[ "${command}" == "validate" || "${command}" == "analyse" ]] && capture="$1" ;;
   esac
   shift
 done
@@ -37,11 +39,45 @@ case "${command}" in
     ;;
   dump)
     [[ -f "${TMP_STATE}/dump-fails" ]] && exit 1
-    printf '%s\n' \
-      '{"kind":"info","frozen":true,"count":1}' \
-      '{"kind":"record"}' >"${output}"
+    if [[ -f "${TMP_STATE}/dump-fails-partial" ]]; then
+      printf '%s\n' \
+        '{"kind":"info","frozen":true,"protocol_version":2,"count":4,"freeze_reason":"host"}' \
+        >"${output}"
+      exit 1
+    fi
+    if [[ -f "${TMP_STATE}/protocol2" ]]; then
+      header='{"kind":"info","frozen":true,"protocol_version":2,"count":4,'
+      header+='"raw_slots":4,"decoded_records":2,"time_skip_records":2,'
+      header+='"uptime_unknown_records":0,"next_sequence_absolute":104}'
+      printf '%s\n' \
+        "${header}" \
+        '{"kind":"record","absolute_sequence":101}' \
+        '{"kind":"record","absolute_sequence":103}' >"${output}"
+    else
+      header='{"kind":"info","frozen":true,"protocol_version":1,"count":1,'
+      header+='"raw_slots":1,"decoded_records":1,"time_skip_records":0,'
+      header+='"uptime_unknown_records":0,"next_sequence_absolute":1}'
+      printf '%s\n' \
+        "${header}" \
+        '{"kind":"record","absolute_sequence":0}' >"${output}"
+    fi
     ;;
-  arm) echo '{"kind":"info","count":1}' ;;
+  validate)
+    if [[ -f "${TMP_STATE}/validation-fails" ]]; then
+      echo '{"kind":"validation","valid":false,"error":"synthetic failure"}'
+      exit 1
+    fi
+    if [[ -f "${TMP_STATE}/protocol2" ]]; then
+      echo '{"kind":"validation","valid":true,"protocol_version":2,"raw_slots":4,"decoded_records":2,"time_skip_records":2}'
+    else
+      echo '{"kind":"validation","valid":true,"protocol_version":1,"raw_slots":1,"decoded_records":1,"time_skip_records":0}'
+    fi
+    ;;
+  analyse) ;;
+  arm)
+    touch "${TMP_STATE}/armed"
+    echo '{"kind":"info","count":1}'
+    ;;
 esac
 EOF
   chmod +x "${root}/ultra/scripts/diagnostics.py"
@@ -91,6 +127,11 @@ run_case() (
     "${COLLECTOR}" "$@" "${root}/ultra" >"${root}/run.out"
 
   grep -q "^hardware_id=${expected_id}$" "${root}"/out/*.txt
+  grep -q "^repository_dirty=unknown$" "${root}"/out/*.txt
+  grep -q "^capture_status=validated$" "${root}"/out/*.txt
+  grep -q "^ring_rearmed=true$" "${root}"/out/*.txt
+  grep -q '"valid":true' "${root}"/out/*.txt
+  [[ -f "${root}/armed" ]]
   grep -q "detach --busid ${expected_busid}" "${root}/detach.log"
   grep -q "Detached ${expected_id} (${expected_busid})" "${root}/run.out"
 )
@@ -115,12 +156,117 @@ run_failed_capture_case() (
 
   grep -q "detach --busid 9-3" "${root}/detach.log"
   ! compgen -G "${root}/out/*.jsonl" >/dev/null
+  grep -q "^capture_status=dump_failed$" "${root}"/out/*.txt
+  grep -q "^capture_preserved=false$" "${root}"/out/*.txt
+  grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  [[ ! -f "${root}/armed" ]]
   ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
+)
+
+# A dump that stops part way through still wrote the header, which names the
+# freeze reason. That is evidence and outlives the failure.
+run_partial_dump_case() (
+  local root
+  root="$(mktemp -d)"
+  trap 'rm -rf "${root}"' EXIT
+  make_fixture "${root}"
+  touch "${root}/dump-fails-partial"
+
+  if TMP_STATE="${root}" \
+    DWERTY_CAPTURE_DIR="${root}/out" \
+    DWERTY_CAPTURE_TEST_MODE=1 \
+    DWERTY_SETTLE_SECONDS=0 \
+    DWERTY_USBIPD="${root}/usbipd.exe" \
+    "${COLLECTOR}" "${root}/ultra" >"${root}/run.out" 2>"${root}/run.err"; then
+    echo "Expected the capture to fail" >&2
+    exit 1
+  fi
+
+  compgen -G "${root}/out/*.jsonl" >/dev/null
+  grep -q '"freeze_reason":"host"' "${root}"/out/*.jsonl
+  grep -q "^capture_status=dump_failed$" "${root}"/out/*.txt
+  grep -q "^capture_preserved=true$" "${root}"/out/*.txt
+  grep -q "^capture_partial=true$" "${root}"/out/*.txt
+  grep -q "^capture_validated=false$" "${root}"/out/*.txt
+  grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  [[ ! -f "${root}/armed" ]]
+  ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
+  grep -q "detach --busid 9-3" "${root}/detach.log"
+)
+
+run_failed_validation_case() (
+  local root
+  root="$(mktemp -d)"
+  trap 'rm -rf "${root}"' EXIT
+  make_fixture "${root}"
+  touch "${root}/validation-fails"
+
+  if TMP_STATE="${root}" \
+    DWERTY_CAPTURE_DIR="${root}/out" \
+    DWERTY_CAPTURE_TEST_MODE=1 \
+    DWERTY_SETTLE_SECONDS=0 \
+    DWERTY_USBIPD="${root}/usbipd.exe" \
+    "${COLLECTOR}" "${root}/ultra" >"${root}/run.out" 2>"${root}/run.err"; then
+    echo "Expected validation to fail" >&2
+    exit 1
+  fi
+
+  compgen -G "${root}/out/*.jsonl" >/dev/null
+  grep -q "^capture_status=validation_failed$" "${root}"/out/*.txt
+  grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  grep -q "^ring_remains_frozen=true$" "${root}"/out/*.txt
+  grep -q '"valid":false' "${root}"/out/*.txt
+  [[ ! -f "${root}/armed" ]]
+  grep -q "detach --busid 9-3" "${root}/detach.log"
+)
+
+run_keep_frozen_case() (
+  local root
+  root="$(mktemp -d)"
+  trap 'rm -rf "${root}"' EXIT
+  make_fixture "${root}"
+  touch "${root}/protocol2"
+
+  TMP_STATE="${root}" \
+    DWERTY_CAPTURE_DIR="${root}/out" \
+    DWERTY_CAPTURE_TEST_MODE=1 \
+    DWERTY_SETTLE_SECONDS=0 \
+    DWERTY_USBIPD="${root}/usbipd.exe" \
+    "${COLLECTOR}" --keep-frozen "${root}/ultra" >"${root}/run.out"
+
+  grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  grep -q "^ring_remains_frozen=true$" "${root}"/out/*.txt
+  grep -q '"protocol_version":2' "${root}"/out/*.txt
+  [[ ! -f "${root}/armed" ]]
+)
+
+run_keep_attached_case() (
+  local root
+  root="$(mktemp -d)"
+  trap 'rm -rf "${root}"' EXIT
+  make_fixture "${root}"
+
+  TMP_STATE="${root}" \
+    DWERTY_CAPTURE_DIR="${root}/out" \
+    DWERTY_CAPTURE_TEST_MODE=1 \
+    DWERTY_SETTLE_SECONDS=0 \
+    DWERTY_USBIPD="${root}/usbipd.exe" \
+    "${COLLECTOR}" --keep-attached "${root}/ultra" >"${root}/run.out"
+
+  grep -q "^ring_rearmed=true$" "${root}"/out/*.txt
+  [[ -f "${root}/armed" ]]
+  [[ ! -f "${root}/detach.log" ]]
+  grep -q "left attached to WSL" "${root}/run.out"
 )
 
 run_case "3434:d028" "9-3"
 run_case "3434:0c60" "11-1" --hardware-id 3434:0C60
 # A receiver that enumerates without answering must not shadow the wired path.
 PRESET_MARKERS="mute-d028" run_case "3434:0c60" "11-1"
+PRESET_MARKERS="protocol2" run_case "3434:d028" "9-3"
 run_failed_capture_case
+run_partial_dump_case
+run_failed_validation_case
+run_keep_frozen_case
+run_keep_attached_case
 echo "Incident capture autodetection tests passed"

@@ -141,7 +141,7 @@ def encode_records_v2(records, anchor_interval=64):
     return bytes(stream)
 
 
-def decode_records_v2(stream, uptime_ms=0, sequence=0):
+def decode_records_v2(stream, uptime_ms=0, sequence=0, with_stats=False):
     """Decode a protocol 2 stream, restoring absolute uptime and sequence.
 
     A wrapped ring can begin part way through, so an anchor stamps the record
@@ -212,6 +212,16 @@ def decode_records_v2(stream, uptime_ms=0, sequence=0):
         if index not in times:
             record["uptime_unknown"] = True
         records.append(record)
+    stats = {
+        "raw_slots": len(entries),
+        "decoded_records": len(records),
+        "time_skip_records": len(entries) - len(emitted),
+        "uptime_unknown_records": sum(
+            1 for record in records if record.get("uptime_unknown")
+        ),
+    }
+    if with_stats:
+        return records, stats
     return records
 
 
@@ -241,6 +251,24 @@ def capture_schema():
                 "sequence": "Not stored. A record's position in the ring determines it, "
                             "so the decoder restores the same values protocol 1 stored.",
             },
+        },
+        "capture_header": {
+            "count": "Raw ring slots reported by the firmware. Protocol records such as "
+                     "time_skip anchors are included.",
+            "raw_slots": "Raw slots read from the device. Equal to count for a complete dump.",
+            "decoded_records": "Event records emitted to JSONL after protocol records are "
+                               "consumed.",
+            "time_skip_records": "Protocol 2 anchor slots consumed by the decoder and not "
+                                 "emitted as events.",
+            "uptime_unknown_records": "Decoded events whose wall-clock time cannot be "
+                                      "reconstructed without inventing a timestamp.",
+        },
+        "validation": {
+            "valid": "True only when the JSONL structure, counts, and absolute sequence "
+                     "coverage are internally consistent.",
+            "method": "header_stats for current captures, legacy_protocol_1 or "
+                      "legacy_protocol_2_sequence for older captures.",
+            "relationship": "raw_slots = decoded_records + time_skip_records",
         },
         "units": {
             "uptime_ms": "milliseconds since boot",
@@ -968,6 +996,133 @@ def emit(value, output):
         print(line)
 
 
+def validate_capture(objects):
+    if not objects:
+        raise ValueError("capture is empty")
+    header = objects[0]
+    if not isinstance(header, dict):
+        raise ValueError("capture header is not a JSON object")
+    if header.get("kind") != "info":
+        raise ValueError("capture does not begin with an info header")
+    if not header.get("frozen"):
+        raise ValueError("capture header does not describe a frozen ring")
+
+    if any(not isinstance(item, dict) for item in objects[1:]):
+        raise ValueError("capture contains a non-object JSONL record")
+    unexpected = [
+        item.get("kind") for item in objects[1:] if item.get("kind") != "record"
+    ]
+    if unexpected:
+        raise ValueError(f"capture contains unexpected JSONL objects: {unexpected}")
+    records = objects[1:]
+
+    protocol_version = header.get("protocol_version", 1)
+    if protocol_version not in (1, 2):
+        raise ValueError(f"unsupported protocol version: {protocol_version}")
+    raw_slots = header.get("raw_slots", header.get("count"))
+    if not isinstance(raw_slots, int) or raw_slots < 0:
+        raise ValueError("capture header has an invalid raw slot count")
+    if header.get("count") != raw_slots:
+        raise ValueError("capture header count and raw_slots disagree")
+
+    decoded_records = len(records)
+    expected_decoded = header.get("decoded_records")
+    expected_time_skip = header.get("time_skip_records")
+    method = "header_stats"
+    if expected_decoded is None or expected_time_skip is None:
+        if protocol_version == 1:
+            expected_decoded = raw_slots
+            expected_time_skip = 0
+            method = "legacy_protocol_1"
+        else:
+            expected_decoded = decoded_records
+            expected_time_skip = raw_slots - decoded_records
+            method = "legacy_protocol_2_sequence"
+
+    for name, value in (
+        ("decoded_records", expected_decoded),
+        ("time_skip_records", expected_time_skip),
+    ):
+        if not isinstance(value, int) or value < 0:
+            raise ValueError(f"capture header has an invalid {name} value")
+    if decoded_records != expected_decoded:
+        raise ValueError(
+            f"decoded record count mismatch: header={expected_decoded}, "
+            f"file={decoded_records}"
+        )
+    if expected_decoded + expected_time_skip != raw_slots:
+        raise ValueError(
+            "capture accounting mismatch: raw_slots must equal decoded_records "
+            "plus time_skip_records"
+        )
+
+    next_sequence = header.get("next_sequence_absolute")
+    if not isinstance(next_sequence, int):
+        raise ValueError("capture header has no absolute next sequence")
+    expected_start = next_sequence - raw_slots
+    expected_end = next_sequence - 1
+    sequences = [record.get("absolute_sequence") for record in records]
+    if any(not isinstance(sequence, int) for sequence in sequences):
+        raise ValueError("capture contains a record without an absolute sequence")
+    if sequences != sorted(sequences) or len(sequences) != len(set(sequences)):
+        raise ValueError("capture sequences are duplicate or out of order")
+    if any(
+        sequence < expected_start or sequence > expected_end
+        for sequence in sequences
+    ):
+        raise ValueError("capture sequence falls outside the firmware ring window")
+    missing_slots = raw_slots - len(sequences)
+    if missing_slots != expected_time_skip:
+        raise ValueError(
+            f"sequence coverage mismatch: missing={missing_slots}, "
+            f"time_skip_records={expected_time_skip}"
+        )
+
+    uptime_unknown = sum(
+        1 for record in records if record.get("uptime_unknown")
+    )
+    expected_unknown = header.get("uptime_unknown_records", uptime_unknown)
+    if expected_unknown != uptime_unknown:
+        raise ValueError(
+            f"unknown uptime count mismatch: header={expected_unknown}, "
+            f"file={uptime_unknown}"
+        )
+
+    return {
+        "kind": "validation",
+        "valid": True,
+        "method": method,
+        "protocol_version": protocol_version,
+        "raw_slots": raw_slots,
+        "decoded_records": decoded_records,
+        "time_skip_records": expected_time_skip,
+        "uptime_unknown_records": uptime_unknown,
+        "sequence_start": expected_start,
+        "sequence_end": expected_end,
+    }
+
+
+def run_validate(args):
+    try:
+        lines = pathlib.Path(args.capture).read_text(encoding="utf-8").splitlines()
+        objects = [json.loads(line) for line in lines if line.strip()]
+        result = validate_capture(objects)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print(
+            json.dumps(
+                {
+                    "kind": "validation",
+                    "valid": False,
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                },
+                sort_keys=True,
+            )
+        )
+        raise SystemExit(1) from error
+    print(json.dumps(result, sort_keys=True))
+
+
 def run_hid_command(args):
     device = open_selected(args)
     output = pathlib.Path(args.output).open("w", encoding="utf-8") if args.output else None
@@ -999,16 +1154,6 @@ def run_hid_command(args):
         info = parse_info(device.exchange("info"))
         after = dt.datetime.now(dt.timezone.utc)
         boot_at = before + (after - before) / 2 - dt.timedelta(milliseconds=info["uptime_ms"])
-        emit(
-            {
-                "kind": "info",
-                "captured_at": after.isoformat(),
-                "boot_at": boot_at.isoformat(),
-                "boot_uncertainty_ms": (after - before) / dt.timedelta(milliseconds=1),
-                **info,
-            },
-            output,
-        )
         record_size = info["record_size"]
         if record_size not in (RECORD_SIZE, RECORD_SIZE_V2):
             raise RuntimeError(
@@ -1025,22 +1170,54 @@ def run_hid_command(args):
                 raise RuntimeError(f"firmware returned no records at index {index}")
             for offset in range(returned):
                 start = 8 + offset * record_size
-                stream += response[start:start + record_size]
+                end = start + record_size
+                if end > len(response):
+                    raise RuntimeError(
+                        f"firmware returned a truncated record at index {index + offset}"
+                    )
+                stream += response[start:end]
             index += returned
 
+        expected_bytes = info["count"] * record_size
+        if len(stream) != expected_bytes:
+            raise RuntimeError(
+                f"raw trace length mismatch: expected={expected_bytes}, "
+                f"received={len(stream)}"
+            )
         absolute_sequence = info["next_sequence_absolute"] - info["count"]
         if record_size == RECORD_SIZE_V2:
-            records = decode_records_v2(stream, sequence=absolute_sequence)
+            records, decode_stats = decode_records_v2(
+                stream,
+                sequence=absolute_sequence,
+                with_stats=True,
+            )
         else:
             records = []
             for offset in range(0, len(stream), RECORD_SIZE):
                 record = decode_record(stream[offset:offset + RECORD_SIZE])
                 record["absolute_sequence"] = absolute_sequence + offset // RECORD_SIZE
                 records.append(record)
+            decode_stats = {
+                "raw_slots": info["count"],
+                "decoded_records": len(records),
+                "time_skip_records": 0,
+                "uptime_unknown_records": 0,
+            }
+        emit(
+            {
+                "kind": "info",
+                "captured_at": after.isoformat(),
+                "boot_at": boot_at.isoformat(),
+                "boot_uncertainty_ms": (after - before) / dt.timedelta(milliseconds=1),
+                **info,
+                **decode_stats,
+            },
+            output,
+        )
         for record in records:
-            record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])
+            if not record.get("uptime_unknown"):
+                record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])
             emit({"kind": "record", **record}, output)
-            index += returned
     finally:
         if output:
             output.close()
@@ -1113,6 +1290,8 @@ def main():
     analyse_parser.add_argument("capture")
     analyse_parser.add_argument("--keymap")
     analyse_parser.add_argument("--presses", action="store_true")
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("capture")
     subparsers.add_parser("schema")
 
     args = parser.parse_args()
@@ -1123,6 +1302,8 @@ def main():
         run_serial(args)
     elif args.command == "analyse":
         run_analyse(args)
+    elif args.command == "validate":
+        run_validate(args)
     elif args.command == "schema":
         print(json.dumps(capture_schema(), indent=2, sort_keys=True))
     else:

@@ -216,7 +216,12 @@ def main():
     compile_queue_harness(queue_function)
     assert "launcher_command_kb" in patched["diag"]
     assert "DWERTY_DIAG_UART_MAGIC_0" in patched["diag"]
-    assert "BUILD_ASSERT(sizeof(struct dwerty_diag_record) == 12)" in patched["diag"]
+    assert "#define DWERTY_DIAG_PROTOCOL_VERSION 2" in patched["diag"]
+    assert "#define DWERTY_DIAG_RECORD_SIZE 7" in patched["diag"]
+    assert (
+        "BUILD_ASSERT(sizeof(struct dwerty_diag_record) == DWERTY_DIAG_RECORD_SIZE)"
+        in patched["diag"]
+    )
     assert "raw_hid_send(data, length);" in patched["diag"]
     assert "#define dwerty_diag_record(...) ((void)0)" in patched["diag_header"]
     assert "#define dwerty_diag_record_hid(...) ((void)0)" in patched["diag_header"]

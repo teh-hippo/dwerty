@@ -280,6 +280,56 @@ class FakeDumpDevice:
         return bytes(response)
 
 
+class FakeProtocol2DumpDevice:
+    def __init__(self):
+        records = [
+            {
+                "event_type": 3,
+                "flags": 1,
+                "uptime_ms": 1000,
+                "arg0": 1,
+                "arg1": 0,
+            },
+            {
+                "event_type": 4,
+                "flags": 0,
+                "uptime_ms": 900000,
+                "arg0": 1,
+                "arg1": 0,
+            },
+        ]
+        self.stream = diagnostics.encode_records_v2(records)
+        self.count = len(self.stream) // diagnostics.RECORD_SIZE_V2
+
+    def close(self):
+        pass
+
+    def exchange(self, subcommand, value=0):
+        response = bytearray(diagnostics.REPORT_SIZE)
+        response[0] = diagnostics.COMMAND
+        response[1] = diagnostics.SUBCOMMANDS[subcommand]
+        if subcommand == "read":
+            remaining = self.count - value
+            returned = min(
+                remaining,
+                (diagnostics.REPORT_SIZE - 8) // diagnostics.RECORD_SIZE_V2,
+            )
+            response[3] = returned
+            struct.pack_into("<H", response, 4, value)
+            start = value * diagnostics.RECORD_SIZE_V2
+            end = start + returned * diagnostics.RECORD_SIZE_V2
+            response[8:8 + end - start] = self.stream[start:end]
+            return bytes(response)
+        response[3] = 2
+        response[4] = diagnostics.RECORD_SIZE_V2
+        struct.pack_into("<H", response, 5, 1024)
+        struct.pack_into("<H", response, 7, self.count)
+        response[11] = 1
+        struct.pack_into("<I", response, 21, 1000000)
+        struct.pack_into("<I", response, 27, 100 + self.count)
+        return bytes(response)
+
+
 class CaptureAnalysisTest(unittest.TestCase):
     KEYMAP = pathlib.Path(__file__).parents[1] / "config" / diagnostics.KEYMAP_NAME
 
@@ -534,6 +584,171 @@ class RecordCodecTest(unittest.TestCase):
         self.assertFalse(any(item.get("uptime_unknown") for item in decoded))
         tail = [item["uptime_ms"] for item in decoded]
         self.assertEqual(tail, [item["uptime_ms"] for item in records][-len(tail):])
+
+    def test_marks_time_before_a_discontinuous_anchor_as_unknown(self):
+        stream = b"".join(
+            [
+                diagnostics.pack_record_v2(3, 1, 5, 1, 0),
+                diagnostics.pack_record_v2(
+                    18,
+                    0,
+                    diagnostics.TIME_DELTA_ESCAPE,
+                    900000 & 0xFFFF,
+                    900000 >> 16,
+                ),
+                diagnostics.pack_record_v2(4, 0, 0, 1, 0),
+            ]
+        )
+        decoded, stats = diagnostics.decode_records_v2(stream, with_stats=True)
+        self.assertTrue(decoded[0]["uptime_unknown"])
+        self.assertNotIn("uptime_unknown", decoded[1])
+        self.assertEqual(stats["uptime_unknown_records"], 1)
+
+    def test_a_protocol_2_dump_describes_decoded_and_anchor_records(self):
+        fake = FakeProtocol2DumpDevice()
+        with tempfile.TemporaryDirectory() as directory:
+            capture = pathlib.Path(directory) / "capture.jsonl"
+            args = argparse.Namespace(command="dump", output=str(capture))
+            with mock.patch.object(diagnostics, "open_selected", return_value=fake):
+                diagnostics.run_hid_command(args)
+            objects = [
+                json.loads(line) for line in capture.read_text().splitlines()
+            ]
+
+        header = objects[0]
+        self.assertEqual(header["raw_slots"], 4)
+        self.assertEqual(header["decoded_records"], 2)
+        self.assertEqual(header["time_skip_records"], 2)
+        self.assertEqual(header["uptime_unknown_records"], 0)
+        self.assertEqual(
+            diagnostics.validate_capture(objects)["method"],
+            "header_stats",
+        )
+
+    def test_validates_protocol_2_sequence_gaps_as_declared_anchors(self):
+        objects = [
+            {
+                "kind": "info",
+                "frozen": True,
+                "protocol_version": 2,
+                "count": 4,
+                "raw_slots": 4,
+                "decoded_records": 2,
+                "time_skip_records": 2,
+                "uptime_unknown_records": 0,
+                "next_sequence_absolute": 104,
+            },
+            {"kind": "record", "absolute_sequence": 101},
+            {"kind": "record", "absolute_sequence": 103},
+        ]
+        validation = diagnostics.validate_capture(objects)
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["raw_slots"], 4)
+        self.assertEqual(validation["decoded_records"], 2)
+        self.assertEqual(validation["time_skip_records"], 2)
+
+    def test_validates_the_full_ring_hardware_failure_shape(self):
+        sequence_start = 3160
+        sequence_end = 4183
+        anchors = set(range(sequence_start + 20, sequence_end + 1, 60))
+        self.assertEqual(len(anchors), 17)
+        records = [
+            {"kind": "record", "absolute_sequence": sequence}
+            for sequence in range(sequence_start, sequence_end + 1)
+            if sequence not in anchors
+        ]
+        self.assertEqual(len(records), 1007)
+        objects = [
+            {
+                "kind": "info",
+                "frozen": True,
+                "protocol_version": 2,
+                "count": 1024,
+                "raw_slots": 1024,
+                "decoded_records": 1007,
+                "time_skip_records": 17,
+                "uptime_unknown_records": 0,
+                "next_sequence_absolute": 4184,
+            },
+            *records,
+        ]
+        validation = diagnostics.validate_capture(objects)
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["raw_slots"], 1024)
+        self.assertEqual(validation["decoded_records"], 1007)
+        self.assertEqual(validation["time_skip_records"], 17)
+
+    def test_rejects_a_truncated_decoded_capture(self):
+        objects = [
+            {
+                "kind": "info",
+                "frozen": True,
+                "protocol_version": 2,
+                "count": 4,
+                "raw_slots": 4,
+                "decoded_records": 2,
+                "time_skip_records": 2,
+                "uptime_unknown_records": 0,
+                "next_sequence_absolute": 104,
+            },
+            {"kind": "record", "absolute_sequence": 101},
+        ]
+        with self.assertRaisesRegex(ValueError, "decoded record count mismatch"):
+            diagnostics.validate_capture(objects)
+
+    def test_rejects_an_unfrozen_or_malformed_header(self):
+        with self.assertRaisesRegex(ValueError, "does not describe a frozen ring"):
+            diagnostics.validate_capture([{"kind": "info", "frozen": False}])
+        with self.assertRaisesRegex(ValueError, "does not begin with an info header"):
+            diagnostics.validate_capture([{"kind": "record"}])
+        with self.assertRaisesRegex(ValueError, "header is not a JSON object"):
+            diagnostics.validate_capture(["not an object"])
+        with self.assertRaisesRegex(ValueError, "non-object JSONL record"):
+            diagnostics.validate_capture(
+                [{"kind": "info", "frozen": True}, "not an object"]
+            )
+
+    def test_rejects_duplicate_or_out_of_order_sequences(self):
+        header = {
+            "kind": "info",
+            "frozen": True,
+            "protocol_version": 1,
+            "count": 2,
+            "raw_slots": 2,
+            "decoded_records": 2,
+            "time_skip_records": 0,
+            "uptime_unknown_records": 0,
+            "next_sequence_absolute": 12,
+        }
+        for sequences in ([10, 10], [11, 10]):
+            objects = [header] + [
+                {"kind": "record", "absolute_sequence": sequence}
+                for sequence in sequences
+            ]
+            with self.assertRaisesRegex(ValueError, "duplicate or out of order"):
+                diagnostics.validate_capture(objects)
+
+    def test_rejects_an_unknown_timestamp_count_mismatch(self):
+        objects = [
+            {
+                "kind": "info",
+                "frozen": True,
+                "protocol_version": 1,
+                "count": 1,
+                "raw_slots": 1,
+                "decoded_records": 1,
+                "time_skip_records": 0,
+                "uptime_unknown_records": 0,
+                "next_sequence_absolute": 1,
+            },
+            {
+                "kind": "record",
+                "absolute_sequence": 0,
+                "uptime_unknown": True,
+            },
+        ]
+        with self.assertRaisesRegex(ValueError, "unknown uptime count mismatch"):
+            diagnostics.validate_capture(objects)
 
     def test_round_trips_a_real_capture_without_loss(self):
         captures = sorted(self.CAPTURES.glob("dwerty-incident-*.jsonl"))

@@ -81,8 +81,15 @@ Records exist in two protocol versions, and `protocol_version` in the capture he
 
 Timing survives a wrapped ring. Every 64 records, and whenever a delta will not fit, the firmware stores a `time_skip` record holding an absolute uptime, so any retained window contains an anchor. Deltas travel with their own record, so one anchor dates a window forwards and backwards. An anchor states whether the delta it displaced was preserved; where it was not, a record that cannot be dated is marked `uptime_unknown` rather than being given a wrong time.
 
+The firmware header's `count` and `raw_slots` count raw ring slots. Protocol 2
+consumes `time_skip` anchors while decoding, so `decoded_records` can be
+smaller. A complete capture satisfies
+`raw_slots = decoded_records + time_skip_records`. `validate` checks that
+relationship, absolute sequence coverage and unknown-timestamp accounting.
+
 ```bash
 ./scripts/capture-incident.sh                       # freeze, save, re-arm, detach
+./scripts/diagnostics.py validate CAPTURE.jsonl     # protocol-aware completeness check
 ./scripts/diagnostics.py analyse CAPTURE.jsonl      # summary and anomalies
 ./scripts/diagnostics.py analyse --presses CAPTURE.jsonl
 ./scripts/diagnostics.py schema                     # what a capture's fields mean
@@ -92,7 +99,7 @@ Timing survives a wrapped ring. Every 64 records, and whenever a delta will not 
 
 `analyse` names every position from [`config/keychron_v6_ultra_ansi.keymap`](config/keychron_v6_ultra_ansi.keymap) using the layer the firmware recorded, so a trace reads as bindings rather than matrix coordinates. It reports the capture window in wall-clock time, derived from the device uptime and the host clock at the freeze, which is what lets a firmware trace be lined up against a host-side log.
 
-The ring holds about 31 keystrokes, so it must be frozen before anything else is typed. `overwritten` in the summary counts the records already lost.
+The ring holds roughly 60 keystrokes, so it must be frozen before anything else is typed. `overwritten` in the summary counts the records already lost.
 
 The summary counts presses and HID reports. A correct press produces exactly one report on its press edge and one on its release, which is what separates a keyboard fault from a host one: if the firmware emitted one report for a key but the host received several characters, the extra characters did not come from the keyboard. These faults are reported by name:
 
@@ -101,12 +108,10 @@ The summary counts presses and HID reports. A correct press produces exactly one
 | `contact_bounce_absorbed` | The switch bounced and the debouncer filtered it. Hardware wear, no output error. |
 | `repeat_without_raw_release` | A debounced repeat arrived while the raw matrix still read closed, which no real second press can produce. |
 | `press_without_release` | A position was pressed twice with no release routed between. |
-| `release_without_press` | A release was routed for a position that was not held. |
-| `held_at_freeze` | The key was still held when the ring was frozen. |
+| `release_without_press` | A release was routed for a position that was not held, with no overwritten press explaining it. |
 | `modifier_error` | The firmware's modifier refcount underflowed. |
 | `kscan_drop` | The scan queue discarded an event. |
 | `transport_error` | A PPT queue, PPT transmit or HID send stage reported an error or discard. |
-| `modifier_latched` | A modifier bit was still set in the last report of the capture. |
 
 For a modifier latch the summary carries the decisive fields directly. `peak_modifiers` is the most modifiers the keyboard ever placed in a single report, `longest_modifier_hold` is the longest any one modifier stayed set, and `at_freeze.modifiers` lists those still set when recording stopped. A host showing several modifiers held while the keyboard's own peak is one or none did not get them from the keyboard.
 
@@ -120,6 +125,12 @@ The firmware freezes the ring itself in two cases, and `freeze_reason` says whic
 Nothing is recorded once the ring is frozen, so a capture must be taken and the ring re-armed before it can catch anything else.
 
 `at_freeze` is where the capture stopped, not a fault. A ring frozen on five modifiers necessarily reports five modifiers held. Judge it by `held_ms`: a latch runs for tens of seconds, an ordinary chord for a few hundred milliseconds. `truncated_releases` are likewise a boundary effect, releases whose press was overwritten before the window opened.
+
+The collector writes a metadata sidecar on success and failure. A validation
+failure preserves the JSONL, leaves the device ring frozen, records the
+validation error and detaches the selected USB device from WSL. Re-arm only
+after the saved evidence has been reviewed or copied. Metadata records both
+the repository commit and whether that working tree was dirty.
 
 ## The device
 
