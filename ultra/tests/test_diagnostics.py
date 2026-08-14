@@ -496,5 +496,67 @@ class CaptureAnalysisTest(unittest.TestCase):
         )
 
 
+class RecordCodecTest(unittest.TestCase):
+    CAPTURES = pathlib.Path("/mnt/z/keyboard-error/captures")
+
+    def test_packs_and_unpacks_every_field(self):
+        payload = diagnostics.pack_record_v2(17, 0xA5, 0x2AB, 0xBEEF, 0xF00D)
+        self.assertEqual(len(payload), diagnostics.RECORD_SIZE_V2)
+        self.assertEqual(
+            diagnostics.unpack_record_v2(payload), (17, 0xA5, 0x2AB, 0xBEEF, 0xF00D)
+        )
+
+    def test_refuses_a_delta_too_wide_for_the_field(self):
+        with self.assertRaises(ValueError):
+            diagnostics.pack_record_v2(3, 0, diagnostics.TIME_DELTA_ESCAPE + 1, 0, 0)
+
+    def test_carries_a_large_gap_in_a_time_skip_record(self):
+        records = [
+            {"event_type": 3, "flags": 0, "uptime_ms": 1000, "arg0": 1, "arg1": 2},
+            {"event_type": 4, "flags": 0, "uptime_ms": 900000, "arg0": 3, "arg1": 4},
+        ]
+        stream = diagnostics.encode_records_v2(records)
+        self.assertEqual(len(stream), 3 * diagnostics.RECORD_SIZE_V2)
+        decoded = diagnostics.decode_records_v2(stream, uptime_ms=1000)
+        self.assertEqual([item["uptime_ms"] for item in decoded], [1000, 900000])
+        self.assertEqual([item["event"] for item in decoded], ["matrix_raw", "kscan"])
+
+    def test_round_trips_a_real_capture_without_loss(self):
+        captures = sorted(self.CAPTURES.glob("dwerty-incident-*.jsonl"))
+        if not captures:
+            self.skipTest("no saved capture available")
+        ignored = {"kind", "absolute_sequence", "recorded_at"}
+        for path in captures:
+            original = [
+                json.loads(line)
+                for line in path.read_text().splitlines()
+                if json.loads(line).get("kind") == "record"
+            ]
+            stream = diagnostics.encode_records_v2(original)
+            restored = diagnostics.decode_records_v2(
+                stream,
+                uptime_ms=original[0]["uptime_ms"],
+                sequence=original[0]["sequence"],
+            )
+            self.assertEqual(len(restored), len(original), path.name)
+            for before, after in zip(original, restored):
+                self.assertEqual(
+                    {k: v for k, v in before.items() if k not in ignored},
+                    {k: v for k, v in after.items() if k not in ignored},
+                    path.name,
+                )
+
+    def test_schema_covers_every_event_and_anomaly_the_tool_emits(self):
+        schema = diagnostics.capture_schema()
+        self.assertEqual(
+            set(schema["events"]), set(diagnostics.EVENT_NAMES.values())
+        )
+        self.assertEqual(schema["matrix"]["state_row"], diagnostics.STATE_ROW)
+        self.assertEqual(
+            schema["protocol"][2]["record_size"], diagnostics.RECORD_SIZE_V2
+        )
+        json.dumps(schema)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -77,11 +77,16 @@ The host tests reproduce the two live default-layer mutations with test-only `&t
 
 A diagnostics build keeps a 512-record RAM ring of matrix, keymap, modifier, HID and PPT events, readable over the Launcher raw HID interface. `scripts/capture-incident.sh` freezes that ring, saves it as a `.jsonl` trace beside a `.txt` metadata file, then re-arms the ring and detaches the keyboard from WSL.
 
+Records exist in two protocol versions, and `protocol_version` in the capture header says which the firmware wrote. Protocol 1 is a fixed 12-byte record. Protocol 2 packs the same fields into 7 bytes by dropping the stored sequence, which a ring position already determines, and by replacing the absolute uptime with an 11-bit delta, because 77% of consecutive records share a millisecond. A gap too large for that field is carried by a preceding `time_skip` record. Both decode to identical JSON, so a capture reads the same either way and the ring holds about 1.7 times as much history for the same RAM.
+
 ```bash
 ./scripts/capture-incident.sh                       # freeze, save, re-arm, detach
 ./scripts/diagnostics.py analyse CAPTURE.jsonl      # summary and anomalies
 ./scripts/diagnostics.py analyse --presses CAPTURE.jsonl
+./scripts/diagnostics.py schema                     # what a capture's fields mean
 ```
+
+`schema` emits a machine-readable description of the record layouts, every event and its fields, the summary shape, the anomaly meanings and the trace's limits. It is what lets a capture be read without this source, and each capture's `.txt` records the command that produces it.
 
 `analyse` names every position from [`config/keychron_v6_ultra_ansi.keymap`](config/keychron_v6_ultra_ansi.keymap) using the layer the firmware recorded, so a trace reads as bindings rather than matrix coordinates. It reports the capture window in wall-clock time, derived from the device uptime and the host clock at the freeze, which is what lets a firmware trace be lined up against a host-side log.
 

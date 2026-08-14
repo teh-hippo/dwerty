@@ -25,6 +25,13 @@ REPORT_SIZE = 32
 RETRY_INTERVAL_MS = 250
 RECORD_FORMAT = "<HBBIHH"
 RECORD_SIZE = struct.calcsize(RECORD_FORMAT)
+# Protocol 2 packs the same fields into 7 bytes. The sequence is dropped because
+# a ring position already determines it, and the absolute uptime becomes an
+# 11-bit delta, because 77% of consecutive records share a millisecond. A delta
+# too large for that field is carried by a preceding time_skip record.
+RECORD_SIZE_V2 = 7
+TIME_DELTA_BITS = 11
+TIME_DELTA_ESCAPE = (1 << TIME_DELTA_BITS) - 1
 UART_MAGIC = b"\xD7\x59"
 UART_FRAME_SIZE = 2 + RECORD_SIZE + 2
 
@@ -47,6 +54,7 @@ EVENT_NAMES = {
     15: "endpoint",
     16: "freeze",
     17: "mark",
+    18: "time_skip",
 }
 FREEZE_REASONS = {
     1: "host",
@@ -81,6 +89,156 @@ def signed16(value):
 
 def modifier_names(value):
     return [name for bit, name in enumerate(MODIFIERS) if value & (1 << bit)]
+
+
+def pack_record_v2(event_type, flags, delta_ms, arg0, arg1):
+    """Pack one protocol 2 record. Only the time delta straddles a byte boundary."""
+    if not 0 <= delta_ms <= TIME_DELTA_ESCAPE:
+        raise ValueError(f"time delta {delta_ms} does not fit in {TIME_DELTA_BITS} bits")
+    payload = bytearray(RECORD_SIZE_V2)
+    payload[0] = (event_type & 0x1F) | ((delta_ms >> 8) << 5)
+    payload[1] = delta_ms & 0xFF
+    payload[2] = flags & 0xFF
+    struct.pack_into("<HH", payload, 3, arg0 & 0xFFFF, arg1 & 0xFFFF)
+    return bytes(payload)
+
+
+def unpack_record_v2(payload):
+    event_type = payload[0] & 0x1F
+    delta_ms = ((payload[0] >> 5) << 8) | payload[1]
+    arg0, arg1 = struct.unpack_from("<HH", payload, 3)
+    return event_type, payload[2], delta_ms, arg0, arg1
+
+
+def encode_records_v2(records):
+    """Encode decoded records back to protocol 2, inserting time_skip where needed."""
+    stream = bytearray()
+    previous = None
+    for record in records:
+        uptime = record["uptime_ms"]
+        delta = 0 if previous is None else uptime - previous
+        if delta >= TIME_DELTA_ESCAPE or delta < 0:
+            stream += pack_record_v2(
+                18, 0, TIME_DELTA_ESCAPE, uptime & 0xFFFF, (uptime >> 16) & 0xFFFF
+            )
+            delta = 0
+        stream += pack_record_v2(
+            record["event_type"], record["flags"], delta, record["arg0"], record["arg1"]
+        )
+        previous = uptime
+    return bytes(stream)
+
+
+def decode_records_v2(stream, uptime_ms=0, sequence=0):
+    """Decode a protocol 2 stream, restoring absolute uptime and sequence."""
+    records = []
+    for offset in range(0, len(stream) - RECORD_SIZE_V2 + 1, RECORD_SIZE_V2):
+        event_type, flags, delta_ms, arg0, arg1 = unpack_record_v2(
+            stream[offset:offset + RECORD_SIZE_V2]
+        )
+        if event_type == 18 and delta_ms == TIME_DELTA_ESCAPE:
+            uptime_ms = arg0 | (arg1 << 16)
+            continue
+        uptime_ms += delta_ms
+        record = decode_record(
+            struct.pack(RECORD_FORMAT, sequence & 0xFFFF, event_type, flags, uptime_ms, arg0, arg1)
+        )
+        records.append(record)
+        sequence += 1
+    return records
+
+
+def capture_schema():
+    """Describe a capture well enough to be read without this source."""
+    return {
+        "protocol": {
+            1: {
+                "record_size": RECORD_SIZE,
+                "layout": "little endian: sequence u16, event_type u8, flags u8, "
+                          "uptime_ms u32, arg0 u16, arg1 u16",
+            },
+            2: {
+                "record_size": RECORD_SIZE_V2,
+                "layout": "byte0 = event_type[4:0] | time_delta[10:8] << 5, "
+                          "byte1 = time_delta[7:0], byte2 = flags, "
+                          "bytes3-4 = arg0 u16 le, bytes5-6 = arg1 u16 le",
+                "time": "time_delta_ms is relative to the previous record. A delta of "
+                        f"{TIME_DELTA_ESCAPE} marks a time_skip record whose arg0 and arg1 "
+                        "carry the next absolute uptime_ms as a u32.",
+                "sequence": "Not stored. A record's position in the ring determines it, "
+                            "so the decoder restores the same values protocol 1 stored.",
+            },
+        },
+        "units": {
+            "uptime_ms": "milliseconds since boot",
+            "held_ms": "milliseconds",
+            "recorded_at": "ISO 8601 UTC, derived from boot_at plus uptime_ms",
+            "boot_at": "ISO 8601 UTC, device uptime bracketed against the host clock",
+            "boot_uncertainty_ms": "width of that bracket",
+        },
+        "events": {
+            "boot": "Firmware started. Records before it belong to an earlier run.",
+            "arm": "The ring was cleared and started recording.",
+            "matrix_raw": "A raw electrical transition, before debounce. row, column, pressed.",
+            "kscan": "A debounced transition the driver accepted. Adds queue_depth_before.",
+            "kscan_drop": "The scan queue discarded a transition. Adds result.",
+            "position": "A matrix coordinate resolved to a keymap position.",
+            "keymap": "A position routed to a binding. Adds default_layer, active_layers, source.",
+            "modifier": "The modifier refcount changed. Adds explicit_modifiers, report_modifiers.",
+            "hid_clear": "Modifiers were masked or cleared before a report.",
+            "hid_report": "A HID report was formed. Adds modifiers and report_crc16.",
+            "hid_send": "A report was handed to a transport. Adds report_length, result.",
+            "ppt_queue": "A report entered the 2.4 GHz queue. discarded marks an overflow drop.",
+            "ppt_tx": "A radio packet was transmitted. Adds radio_sequence, packet_length, result.",
+            "ppt_state": "The radio connection or vendor state changed.",
+            "endpoint": "The active transport changed.",
+            "freeze": "Recording stopped. reason names the cause.",
+            "mark": "A host correlation marker carrying a nonce.",
+            "time_skip": "Protocol 2 only. Carries an absolute uptime when a delta overflows.",
+        },
+        "matrix": {
+            "state_row": STATE_ROW,
+            "note": "The shield composes a direct GPIO kscan at this row offset for the "
+                    "Mac/Win slide, transport selectors, USB detection and charging. Those "
+                    "inputs hold state indefinitely and are not keystrokes.",
+        },
+        "freeze_reasons": FREEZE_REASONS,
+        "transports": TRANSPORTS,
+        "modifiers": list(MODIFIERS),
+        "summary": {
+            "presses": "Key presses matched to a release within the capture.",
+            "hid_reports": "HID reports the firmware formed.",
+            "overwritten": "Records already lost to ring wrap. Non-zero means the capture is "
+                           "a window, so absence of an event proves nothing.",
+            "peak_modifiers": "The most modifiers the keyboard placed in one report.",
+            "longest_modifier_hold": "The longest any single modifier stayed set.",
+            "at_freeze": "Keys and modifiers still held when recording stopped. Boundary "
+                         "state, not a fault: judge it by held_ms.",
+            "truncated_releases": "Releases whose press was overwritten before the window.",
+            "device_state": "Direct GPIO inputs held at the freeze.",
+            "anomalies": "Counts of things the keyboard did wrong. Empty means it behaved "
+                         "correctly across the retained window.",
+        },
+        "anomalies": {
+            "contact_bounce_absorbed": "A switch bounced and the debouncer filtered it. "
+                                       "Wear, not an output error.",
+            "repeat_without_raw_release": "A debounced repeat arrived while the raw matrix "
+                                          "still read closed, which no real press can produce.",
+            "press_without_release": "A position was pressed twice with no release between.",
+            "release_without_press": "A release was routed for a position not held, and the "
+                                     "press was inside the capture rather than overwritten.",
+            "modifier_error": "The firmware's modifier refcount underflowed.",
+            "kscan_drop": "The scan queue discarded an event.",
+            "transport_error": "A queue, transmit or send stage errored or discarded.",
+        },
+        "limits": [
+            "The trace shows what the MCU read and what the firmware sent. It cannot "
+            "distinguish a switch a person pressed from an intersection read as closed "
+            "for electrical reasons.",
+            "It ends at the keyboard. A receiver USB capture is needed for the radio and "
+            "host stages.",
+        ],
+    }
 
 
 def decode_record(payload):
@@ -866,6 +1024,7 @@ def main():
     analyse_parser.add_argument("capture")
     analyse_parser.add_argument("--keymap")
     analyse_parser.add_argument("--presses", action="store_true")
+    subparsers.add_parser("schema")
 
     args = parser.parse_args()
     if args.command == "list":
@@ -875,6 +1034,8 @@ def main():
         run_serial(args)
     elif args.command == "analyse":
         run_analyse(args)
+    elif args.command == "schema":
+        print(json.dumps(capture_schema(), indent=2, sort_keys=True))
     else:
         run_hid_command(args)
 

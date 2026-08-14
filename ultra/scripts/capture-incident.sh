@@ -328,6 +328,8 @@ PY
   echo "hardware_id=${SELECTED_HARDWARE_ID}"
   echo "device=${device_json}"
   echo "header=$(head -n 1 "${capture}")"
+  echo "schema_command=${DIAGNOSTICS} schema"
+  echo "analyse_command=${DIAGNOSTICS} analyse ${capture}"
   echo "${validation}"
 } >"${metadata}"
 
