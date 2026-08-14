@@ -206,8 +206,14 @@ def keymap_event(uptime, position, pressed, layer=3):
     }
 
 
-def hid_report(uptime):
-    return {"kind": "record", "event": "hid_report", "uptime_ms": uptime, "modifiers": 0}
+def hid_report(uptime, modifiers=0):
+    return {
+        "kind": "record",
+        "event": "hid_report",
+        "uptime_ms": uptime,
+        "modifiers": modifiers,
+        "modifier_names": diagnostics.modifier_names(modifiers),
+    }
 
 
 def matrix_event(uptime, row, column, pressed, event="matrix_raw"):
@@ -366,6 +372,55 @@ class CaptureAnalysisTest(unittest.TestCase):
         capture = [keymap_event(1000, 63, False), hid_report(1000)]
         _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
         self.assertEqual([item["anomaly"] for item in anomalies], ["release_without_press"])
+
+    def test_reports_a_transport_stage_that_failed_or_discarded(self):
+        capture = [
+            {
+                "kind": "record",
+                "event": "ppt_queue",
+                "uptime_ms": 100,
+                "error": False,
+                "discarded": True,
+            },
+            {
+                "kind": "record",
+                "event": "hid_send",
+                "uptime_ms": 200,
+                "error": True,
+                "transport": "ppt",
+                "result": -5,
+            },
+        ]
+        _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(
+            [(item["anomaly"], item["stage"]) for item in anomalies],
+            [("transport_error", "ppt_queue"), ("transport_error", "hid_send")],
+        )
+
+    def test_reports_the_modifiers_a_capture_shows_the_keyboard_sending(self):
+        capture = [
+            hid_report(1000, modifiers=0x01),
+            hid_report(1400, modifiers=0x2B),
+            hid_report(9000, modifiers=0x00),
+        ]
+        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(summary["peak_modifiers"]["modifiers"], 0x2B)
+        self.assertEqual(
+            summary["peak_modifiers"]["names"], ["lctrl", "lshift", "lgui", "rshift"]
+        )
+        self.assertEqual(summary["longest_modifier_hold"]["modifier"], "lctrl")
+        self.assertEqual(summary["longest_modifier_hold"]["held_ms"], 8000)
+        self.assertEqual(summary["modifiers_at_freeze"], [])
+        self.assertEqual(anomalies, [])
+
+    def test_reports_a_modifier_the_keyboard_never_released(self):
+        capture = [hid_report(1000, modifiers=0x04), hid_report(31000, modifiers=0x04)]
+        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(
+            [(item["anomaly"], item["modifier"]) for item in anomalies],
+            [("modifier_latched", "lalt")],
+        )
+        self.assertEqual(summary["modifiers_at_freeze"][0]["held_ms"], 30000)
 
     def test_treats_the_direct_gpio_row_as_device_state(self):
         capture = [

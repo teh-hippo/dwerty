@@ -98,6 +98,12 @@ The summary counts presses and HID reports. A correct press produces exactly one
 | `held_at_freeze` | The key was still held when the ring was frozen. |
 | `modifier_error` | The firmware's modifier refcount underflowed. |
 | `kscan_drop` | The scan queue discarded an event. |
+| `transport_error` | A PPT queue, PPT transmit or HID send stage reported an error or discard. |
+| `modifier_latched` | A modifier bit was still set in the last report of the capture. |
+
+For a modifier latch the summary carries the decisive fields directly. `peak_modifiers` is the most modifiers the keyboard ever placed in a single report, `longest_modifier_hold` is the longest any one modifier stayed set, and `modifiers_at_freeze` lists those never released. A host showing several modifiers held while the keyboard's own peak is one or none did not get them from the keyboard.
+
+The firmware freezes the ring itself when a report carries four or more modifiers, recording eight further records before stopping, so the run-up to a burst is preserved rather than the aftermath. A capture whose `freeze_reason` is `suspicious_modifiers` was triggered that way rather than by hand.
 
 ## The device
 

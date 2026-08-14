@@ -307,6 +307,18 @@ def analyse_capture(objects, layers):
                 )
         elif event == "kscan_drop":
             anomalies.append({"anomaly": "kscan_drop", "at": moment(record), **describe(record)})
+        elif event in ("ppt_queue", "ppt_tx", "hid_send"):
+            if record.get("error") or record.get("discarded") or record.get("result", 0) < 0:
+                anomalies.append(
+                    {
+                        "anomaly": "transport_error",
+                        "at": moment(record),
+                        "stage": event,
+                        "transport": record.get("transport"),
+                        "result": record.get("result"),
+                        "discarded": record.get("discarded"),
+                    }
+                )
         elif event == "keymap":
             default_layer = record["default_layer"]
             position = record["position"]
@@ -379,6 +391,50 @@ def analyse_capture(objects, layers):
                 }
             )
 
+    modifier_state = 0
+    modifier_since = {}
+    longest_hold = None
+    peak = {"modifiers": 0, "names": [], "at": None}
+    for record in records:
+        if record["event"] != "hid_report":
+            continue
+        current = record["modifiers"]
+        if bin(current).count("1") > bin(peak["modifiers"]).count("1"):
+            peak = {
+                "modifiers": current,
+                "names": record["modifier_names"],
+                "at": moment(record),
+            }
+        for bit in range(8):
+            mask = 1 << bit
+            if not (current ^ modifier_state) & mask:
+                continue
+            if current & mask:
+                modifier_since[bit] = record
+            else:
+                down = modifier_since.pop(bit, None)
+                if down is None:
+                    continue
+                hold = {
+                    "modifier": MODIFIERS[bit],
+                    "at": moment(down),
+                    "held_ms": record["uptime_ms"] - down["uptime_ms"],
+                }
+                if longest_hold is None or hold["held_ms"] > longest_hold["held_ms"]:
+                    longest_hold = hold
+        modifier_state = current
+
+    latched = []
+    for bit, down in sorted(modifier_since.items()):
+        latched.append(
+            {
+                "modifier": MODIFIERS[bit],
+                "at": moment(down),
+                "held_ms": records[-1]["uptime_ms"] - down["uptime_ms"],
+            }
+        )
+        anomalies.append({"anomaly": "modifier_latched", **latched[-1]})
+
     device_state = []
     for position, (_, down) in sorted(held.items()):
         key = coordinates.get(position)
@@ -401,6 +457,9 @@ def analyse_capture(objects, layers):
         "boot_at": boot_at.isoformat() if boot_at else None,
         "boot_uncertainty_ms": info.get("boot_uncertainty_ms"),
         "modifier_depth_at_freeze": modifier_depth,
+        "peak_modifiers": peak,
+        "longest_modifier_hold": longest_hold,
+        "modifiers_at_freeze": latched,
         "device_state": device_state,
         "device_state_changes": state_changes,
         "anomalies": collections.Counter(item["anomaly"] for item in anomalies),
