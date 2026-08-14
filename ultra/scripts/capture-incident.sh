@@ -340,6 +340,18 @@ echo "Header:"
 head -n 1 "${capture}"
 echo
 
+analysis="$("${DIAGNOSTICS}" analyse "${capture}" 2>/dev/null || true)"
+if [[ -n "${analysis}" ]]; then
+  {
+    echo "analysis_begin"
+    printf '%s\n' "${analysis}"
+    echo "analysis_end"
+  } >>"${metadata}"
+  echo "Analysis:"
+  printf '%s\n' "${analysis}"
+  echo
+fi
+
 if [[ "${KEEP_FROZEN}" == "1" ]]; then
   echo "Diagnostic ring left frozen (--keep-frozen)." | tee -a "${metadata}"
 else
