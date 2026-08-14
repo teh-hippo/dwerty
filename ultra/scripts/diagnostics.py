@@ -285,9 +285,10 @@ def analyse_capture(objects, layers):
     presses = []
     anomalies = []
     state_changes = []
+    truncated = []
+    pressed_positions = set()
     held = {}
     reports = 0
-    modifier_depth = 0
     default_layer = None
     for index, record in enumerate(records):
         event = record["event"]
@@ -332,10 +333,18 @@ def analyse_capture(objects, layers):
                         }
                     )
                 held[position] = (index, record)
+                pressed_positions.add(position)
             elif position not in held:
-                anomalies.append(
-                    {"anomaly": "release_without_press", "at": moment(record), **describe(record)}
-                )
+                if position in pressed_positions or not info.get("overwritten"):
+                    anomalies.append(
+                        {
+                            "anomaly": "release_without_press",
+                            "at": moment(record),
+                            **describe(record),
+                        }
+                    )
+                else:
+                    truncated.append({"at": moment(record), **describe(record)})
             else:
                 start_index, down = held.pop(position)
                 key = coordinates.get(position)
@@ -433,15 +442,21 @@ def analyse_capture(objects, layers):
                 "held_ms": records[-1]["uptime_ms"] - down["uptime_ms"],
             }
         )
-        anomalies.append({"anomaly": "modifier_latched", **latched[-1]})
 
     device_state = []
+    keys_held = []
     for position, (_, down) in sorted(held.items()):
         key = coordinates.get(position)
         if key and key[0] == STATE_ROW:
             device_state.append(binding_at(layers, down["default_layer"], position))
         else:
-            anomalies.append({"anomaly": "held_at_freeze", "at": moment(down), **describe(down)})
+            keys_held.append(
+                {
+                    "at": moment(down),
+                    "held_ms": records[-1]["uptime_ms"] - down["uptime_ms"],
+                    **describe(down),
+                }
+            )
 
     summary = {
         "kind": "summary",
@@ -456,10 +471,10 @@ def analyse_capture(objects, layers):
         "trigger_reason": info.get("trigger_reason"),
         "boot_at": boot_at.isoformat() if boot_at else None,
         "boot_uncertainty_ms": info.get("boot_uncertainty_ms"),
-        "modifier_depth_at_freeze": modifier_depth,
         "peak_modifiers": peak,
         "longest_modifier_hold": longest_hold,
-        "modifiers_at_freeze": latched,
+        "at_freeze": {"modifiers": latched, "keys": keys_held},
+        "truncated_releases": truncated,
         "device_state": device_state,
         "device_state_changes": state_changes,
         "anomalies": collections.Counter(item["anomaly"] for item in anomalies),

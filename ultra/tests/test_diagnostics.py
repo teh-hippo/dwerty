@@ -349,12 +349,12 @@ class CaptureAnalysisTest(unittest.TestCase):
         )
 
     def test_reports_a_key_still_held_when_the_trace_was_frozen(self):
-        capture = [keymap_event(1000, 95, True), hid_report(1000)]
+        capture = [keymap_event(1000, 95, True), hid_report(9000)]
         summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
         self.assertEqual(presses, [])
-        self.assertEqual(anomalies[0]["anomaly"], "held_at_freeze")
-        self.assertEqual(anomalies[0]["binding"], "&kp LCTRL")
-        self.assertIsNone(summary["window_start"])
+        self.assertEqual(anomalies, [])
+        self.assertEqual(summary["at_freeze"]["keys"][0]["binding"], "&kp LCTRL")
+        self.assertEqual(summary["at_freeze"]["keys"][0]["held_ms"], 8000)
 
     def test_reports_a_second_press_that_arrived_without_a_release(self):
         capture = [
@@ -368,10 +368,24 @@ class CaptureAnalysisTest(unittest.TestCase):
         _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
         self.assertEqual([item["anomaly"] for item in anomalies], ["press_without_release"])
 
+    def test_a_release_before_any_press_is_ring_truncation(self):
+        capture = [
+            {"kind": "info", "overwritten": 4096},
+            keymap_event(1000, 63, False),
+            hid_report(1000),
+        ]
+        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(anomalies, [])
+        self.assertEqual([item["binding"] for item in summary["truncated_releases"]], ["&kp A"])
+
     def test_reports_a_release_that_never_had_a_press(self):
-        capture = [keymap_event(1000, 63, False), hid_report(1000)]
-        _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual([item["anomaly"] for item in anomalies], ["release_without_press"])
+        capture = press_sequence(1000, 63, 3, 1) + [keymap_event(2000, 63, False), hid_report(2000)]
+        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(summary["truncated_releases"], [])
+        self.assertEqual(
+            [(item["anomaly"], item["binding"]) for item in anomalies],
+            [("release_without_press", "&kp A")],
+        )
 
     def test_reports_a_transport_stage_that_failed_or_discarded(self):
         capture = [
@@ -410,17 +424,15 @@ class CaptureAnalysisTest(unittest.TestCase):
         )
         self.assertEqual(summary["longest_modifier_hold"]["modifier"], "lctrl")
         self.assertEqual(summary["longest_modifier_hold"]["held_ms"], 8000)
-        self.assertEqual(summary["modifiers_at_freeze"], [])
+        self.assertEqual(summary["at_freeze"]["modifiers"], [])
         self.assertEqual(anomalies, [])
 
     def test_reports_a_modifier_the_keyboard_never_released(self):
         capture = [hid_report(1000, modifiers=0x04), hid_report(31000, modifiers=0x04)]
         summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(
-            [(item["anomaly"], item["modifier"]) for item in anomalies],
-            [("modifier_latched", "lalt")],
-        )
-        self.assertEqual(summary["modifiers_at_freeze"][0]["held_ms"], 30000)
+        self.assertEqual(anomalies, [])
+        self.assertEqual(summary["at_freeze"]["modifiers"][0]["modifier"], "lalt")
+        self.assertEqual(summary["at_freeze"]["modifiers"][0]["held_ms"], 30000)
 
     def test_treats_the_direct_gpio_row_as_device_state(self):
         capture = [
