@@ -338,8 +338,9 @@ dump_error="$("${DIAGNOSTICS}" "${DIAGNOSTIC_ARGS[@]}" dump --output "${TEMPORAR
 dump_status=$?
 set -e
 if [[ "${dump_status}" -ne 0 ]]; then
-  # A dump writes the info header before it reads any records, so a link that
-  # drops part way through still leaves the freeze reason and ring counts.
+  # A dump writes its info header as soon as the ring is frozen, so a link that
+  # drops part way through still leaves the freeze reason and ring counts.  That
+  # header is marked partial and deliberately does not validate.
   preserved="false"
   if [[ -s "${TEMPORARY}" ]]; then
     mv "${TEMPORARY}" "${capture}"
@@ -363,7 +364,12 @@ if [[ "${dump_status}" -ne 0 ]]; then
       echo "header=$(head -n 1 "${capture}")"
     fi
     echo "ring_rearmed=false"
-    echo "ring_remains_frozen=unknown"
+    if [[ "${preserved}" == "true" ]]; then
+      # A partial header only exists once the ring reported itself frozen.
+      echo "ring_remains_frozen=true"
+    else
+      echo "ring_remains_frozen=unknown"
+    fi
     echo "failure_type=dump"
     echo "dump_error_begin"
     printf '%s\n' "${dump_error}"

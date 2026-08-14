@@ -99,6 +99,17 @@ detaches the selected device from WSL. Use `--keep-frozen` when a successful
 capture's in-device copy must remain untouched. The sidecar records the source
 commit and whether the working tree was dirty.
 
+A dump freezes the ring, asks for its header, then reads every slot. It writes
+that header to the output file straight away and marks it
+`capture_status: partial`, so a link that drops mid-read still leaves the freeze
+reason and ring counts on disk. The completed dump replaces that line with a
+`capture_status: complete` header and the decoded records, so a capture never
+carries two headers. A partial capture holds no records and never validates;
+`validate` rejects it by status rather than letting an empty window pass as a
+consistent one. Its `partial_error` names what stopped the read. A dump that
+fails before the header is known writes nothing, and the sidecar reports
+`capture_preserved=false` with `ring_remains_frozen=unknown`.
+
 A candidate interface is selected only once it answers a diagnostic `info`
 command. Attaching or detaching the receiver through usbipd drops and
 re-establishes the keyboard's PPT link, measured on hardware as a `ppt_state`

@@ -40,9 +40,10 @@ case "${command}" in
   dump)
     [[ -f "${TMP_STATE}/dump-fails" ]] && exit 1
     if [[ -f "${TMP_STATE}/dump-fails-partial" ]]; then
-      printf '%s\n' \
-        '{"kind":"info","frozen":true,"protocol_version":2,"count":4,"freeze_reason":"host"}' \
-        >"${output}"
+      header='{"kind":"info","frozen":true,"protocol_version":2,"count":4,'
+      header+='"capture_status":"partial","raw_slots":2,"freeze_reason":"host",'
+      header+='"partial_error":"timed out waiting for a matching diagnostic response"}'
+      printf '%s\n' "${header}" >"${output}"
       exit 1
     fi
     if [[ -f "${TMP_STATE}/protocol2" ]]; then
@@ -159,12 +160,14 @@ run_failed_capture_case() (
   grep -q "^capture_status=dump_failed$" "${root}"/out/*.txt
   grep -q "^capture_preserved=false$" "${root}"/out/*.txt
   grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  grep -q "^ring_remains_frozen=unknown$" "${root}"/out/*.txt
   [[ ! -f "${root}/armed" ]]
   ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
 )
 
-# A dump that stops part way through still wrote the header, which names the
-# freeze reason. That is evidence and outlives the failure.
+# A dump that stops part way through leaves the partial header it wrote once the
+# ring froze, which names the freeze reason. That is evidence and outlives the
+# failure. It never validates, because the records behind it were never read.
 run_partial_dump_case() (
   local root
   root="$(mktemp -d)"
@@ -183,12 +186,14 @@ run_partial_dump_case() (
   fi
 
   compgen -G "${root}/out/*.jsonl" >/dev/null
+  grep -q '"capture_status":"partial"' "${root}"/out/*.jsonl
   grep -q '"freeze_reason":"host"' "${root}"/out/*.jsonl
   grep -q "^capture_status=dump_failed$" "${root}"/out/*.txt
   grep -q "^capture_preserved=true$" "${root}"/out/*.txt
   grep -q "^capture_partial=true$" "${root}"/out/*.txt
   grep -q "^capture_validated=false$" "${root}"/out/*.txt
   grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
+  grep -q "^ring_remains_frozen=true$" "${root}"/out/*.txt
   [[ ! -f "${root}/armed" ]]
   ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
   grep -q "detach --busid 9-3" "${root}/detach.log"

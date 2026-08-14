@@ -128,9 +128,13 @@ Nothing is recorded once the ring is frozen, so a capture must be taken and the 
 
 The collector writes a metadata sidecar on success and failure. A validation
 failure preserves the JSONL, leaves the device ring frozen, records the
-validation error and detaches the selected USB device from WSL. Re-arm only
-after the saved evidence has been reviewed or copied. Metadata records both
-the repository commit and whether that working tree was dirty.
+validation error and detaches the selected USB device from WSL. A dump that
+loses the link mid-read leaves the header it wrote when the ring froze, marked
+`capture_status: partial`; it names the freeze reason and ring counts, holds no
+records and never validates. A dump that fails before that header is known
+leaves no JSONL at all, which the sidecar reports as `capture_preserved=false`.
+Re-arm only after the saved evidence has been reviewed or copied. Metadata
+records both the repository commit and whether that working tree was dirty.
 
 ## The device
 

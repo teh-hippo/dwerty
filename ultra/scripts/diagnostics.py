@@ -253,6 +253,10 @@ def capture_schema():
             },
         },
         "capture_header": {
+            "capture_status": "complete once every ring slot was read and decoded. "
+                              "partial when the dump froze the ring but the read or decode "
+                              "failed, in which case the header stands alone with no records "
+                              "and carries partial_error.",
             "count": "Raw ring slots reported by the firmware. Protocol records such as "
                      "time_skip anchors are included.",
             "raw_slots": "Raw slots read from the device. Equal to count for a complete dump.",
@@ -265,7 +269,7 @@ def capture_schema():
         },
         "validation": {
             "valid": "True only when the JSONL structure, counts, and absolute sequence "
-                     "coverage are internally consistent.",
+                     "coverage are internally consistent. A partial capture never validates.",
             "method": "header_stats for current captures, legacy_protocol_1 or "
                       "legacy_protocol_2_sequence for older captures.",
             "relationship": "raw_slots = decoded_records + time_skip_records",
@@ -309,6 +313,9 @@ def capture_schema():
         "transports": TRANSPORTS,
         "modifiers": list(MODIFIERS),
         "summary": {
+            "capture_status": "Mirrors the header. A partial summary counts nothing "
+                              "because the records were never read, not because the "
+                              "keyboard behaved.",
             "presses": "Key presses matched to a release within the capture.",
             "hid_reports": "HID reports the firmware formed.",
             "overwritten": "Records already lost to ring wrap. Non-zero means the capture is "
@@ -722,6 +729,7 @@ def analyse_capture(objects, layers):
 
     summary = {
         "kind": "summary",
+        "capture_status": info.get("capture_status", "complete"),
         "records": len(records),
         "window_start": moment(records[0]) if records else None,
         "window_end": moment(records[-1]) if records else None,
@@ -1006,6 +1014,9 @@ def validate_capture(objects):
         raise ValueError("capture does not begin with an info header")
     if not header.get("frozen"):
         raise ValueError("capture header does not describe a frozen ring")
+    status = header.get("capture_status", "complete")
+    if status != "complete":
+        raise ValueError(f"capture is a partial dump: capture_status={status}")
 
     if any(not isinstance(item, dict) for item in objects[1:]):
         raise ValueError("capture contains a non-object JSONL record")
@@ -1161,59 +1172,84 @@ def run_hid_command(args):
                 f"{RECORD_SIZE} or {RECORD_SIZE_V2}"
             )
 
+        header = {
+            "kind": "info",
+            "captured_at": after.isoformat(),
+            "boot_at": boot_at.isoformat(),
+            "boot_uncertainty_ms": (after - before) / dt.timedelta(milliseconds=1),
+            **info,
+        }
+        # A file holds the frozen ring's header from the moment the firmware
+        # reports it, so a link that drops mid-read still leaves the freeze
+        # reason and ring counts behind.  The final header replaces it.
+        rewritable = output is not None and output.seekable()
+        if rewritable:
+            emit({**header, "capture_status": "partial", "raw_slots": 0}, output)
+            output.flush()
+
         index = 0
         stream = bytearray()
-        while index < info["count"]:
-            response = device.exchange("read", index)
-            returned = response[3]
-            if returned == 0:
-                raise RuntimeError(f"firmware returned no records at index {index}")
-            for offset in range(returned):
-                start = 8 + offset * record_size
-                end = start + record_size
-                if end > len(response):
-                    raise RuntimeError(
-                        f"firmware returned a truncated record at index {index + offset}"
-                    )
-                stream += response[start:end]
-            index += returned
+        try:
+            while index < info["count"]:
+                response = device.exchange("read", index)
+                returned = response[3]
+                if returned == 0:
+                    raise RuntimeError(f"firmware returned no records at index {index}")
+                for offset in range(returned):
+                    start = 8 + offset * record_size
+                    end = start + record_size
+                    if end > len(response):
+                        raise RuntimeError(
+                            f"firmware returned a truncated record at index {index + offset}"
+                        )
+                    stream += response[start:end]
+                index += returned
 
-        expected_bytes = info["count"] * record_size
-        if len(stream) != expected_bytes:
-            raise RuntimeError(
-                f"raw trace length mismatch: expected={expected_bytes}, "
-                f"received={len(stream)}"
-            )
-        absolute_sequence = info["next_sequence_absolute"] - info["count"]
-        if record_size == RECORD_SIZE_V2:
-            records, decode_stats = decode_records_v2(
-                stream,
-                sequence=absolute_sequence,
-                with_stats=True,
-            )
-        else:
-            records = []
-            for offset in range(0, len(stream), RECORD_SIZE):
-                record = decode_record(stream[offset:offset + RECORD_SIZE])
-                record["absolute_sequence"] = absolute_sequence + offset // RECORD_SIZE
-                records.append(record)
-            decode_stats = {
-                "raw_slots": info["count"],
-                "decoded_records": len(records),
-                "time_skip_records": 0,
-                "uptime_unknown_records": 0,
-            }
-        emit(
-            {
-                "kind": "info",
-                "captured_at": after.isoformat(),
-                "boot_at": boot_at.isoformat(),
-                "boot_uncertainty_ms": (after - before) / dt.timedelta(milliseconds=1),
-                **info,
-                **decode_stats,
-            },
-            output,
-        )
+            expected_bytes = info["count"] * record_size
+            if len(stream) != expected_bytes:
+                raise RuntimeError(
+                    f"raw trace length mismatch: expected={expected_bytes}, "
+                    f"received={len(stream)}"
+                )
+            absolute_sequence = info["next_sequence_absolute"] - info["count"]
+            if record_size == RECORD_SIZE_V2:
+                records, decode_stats = decode_records_v2(
+                    stream,
+                    sequence=absolute_sequence,
+                    with_stats=True,
+                )
+            else:
+                records = []
+                for offset in range(0, len(stream), RECORD_SIZE):
+                    record = decode_record(stream[offset:offset + RECORD_SIZE])
+                    record["absolute_sequence"] = absolute_sequence + offset // RECORD_SIZE
+                    records.append(record)
+                decode_stats = {
+                    "raw_slots": info["count"],
+                    "decoded_records": len(records),
+                    "time_skip_records": 0,
+                    "uptime_unknown_records": 0,
+                }
+        except Exception as error:
+            if rewritable:
+                output.seek(0)
+                output.truncate()
+                emit(
+                    {
+                        **header,
+                        "capture_status": "partial",
+                        "raw_slots": index,
+                        "partial_error": str(error),
+                        "partial_error_type": type(error).__name__,
+                    },
+                    output,
+                )
+                output.flush()
+            raise
+        if rewritable:
+            output.seek(0)
+            output.truncate()
+        emit({**header, "capture_status": "complete", **decode_stats}, output)
         for record in records:
             if not record.get("uptime_unknown"):
                 record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])

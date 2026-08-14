@@ -281,25 +281,27 @@ class FakeDumpDevice:
 
 
 class FakeProtocol2DumpDevice:
-    def __init__(self):
-        records = [
-            {
-                "event_type": 3,
-                "flags": 1,
-                "uptime_ms": 1000,
-                "arg0": 1,
-                "arg1": 0,
-            },
-            {
-                "event_type": 4,
-                "flags": 0,
-                "uptime_ms": 900000,
-                "arg0": 1,
-                "arg1": 0,
-            },
-        ]
+    def __init__(self, records=None, freeze_reason=1):
+        if records is None:
+            records = [
+                {
+                    "event_type": 3,
+                    "flags": 1,
+                    "uptime_ms": 1000,
+                    "arg0": 1,
+                    "arg1": 0,
+                },
+                {
+                    "event_type": 4,
+                    "flags": 0,
+                    "uptime_ms": 900000,
+                    "arg0": 1,
+                    "arg1": 0,
+                },
+            ]
         self.stream = diagnostics.encode_records_v2(records)
         self.count = len(self.stream) // diagnostics.RECORD_SIZE_V2
+        self.freeze_reason = freeze_reason
 
     def close(self):
         pass
@@ -325,9 +327,38 @@ class FakeProtocol2DumpDevice:
         struct.pack_into("<H", response, 5, 1024)
         struct.pack_into("<H", response, 7, self.count)
         response[11] = 1
+        response[12] = self.freeze_reason
         struct.pack_into("<I", response, 21, 1000000)
         struct.pack_into("<I", response, 27, 100 + self.count)
         return bytes(response)
+
+
+class FailingProtocol2DumpDevice(FakeProtocol2DumpDevice):
+    """A link that stops answering part way through a dump's reads."""
+
+    def __init__(self, answered_reads):
+        super().__init__(
+            [
+                {
+                    "event_type": 3,
+                    "flags": 0,
+                    "uptime_ms": 1000 + index,
+                    "arg0": index,
+                    "arg1": 0,
+                }
+                for index in range(12)
+            ],
+            freeze_reason=2,
+        )
+        self.answered_reads = answered_reads
+        self.reads = 0
+
+    def exchange(self, subcommand, value=0):
+        if subcommand == "read":
+            if self.reads >= self.answered_reads:
+                raise RuntimeError("timed out waiting for a matching diagnostic response")
+            self.reads += 1
+        return super().exchange(subcommand, value)
 
 
 class CaptureAnalysisTest(unittest.TestCase):
@@ -616,14 +647,85 @@ class RecordCodecTest(unittest.TestCase):
             ]
 
         header = objects[0]
+        self.assertEqual(header["capture_status"], "complete")
         self.assertEqual(header["raw_slots"], 4)
         self.assertEqual(header["decoded_records"], 2)
         self.assertEqual(header["time_skip_records"], 2)
         self.assertEqual(header["uptime_unknown_records"], 0)
+        self.assertEqual(len([item for item in objects if item["kind"] == "info"]), 1)
         self.assertEqual(
             diagnostics.validate_capture(objects)["method"],
             "header_stats",
         )
+
+    def test_a_dump_that_loses_the_link_keeps_the_frozen_ring_header(self):
+        fake = FailingProtocol2DumpDevice(answered_reads=1)
+        with tempfile.TemporaryDirectory() as directory:
+            capture = pathlib.Path(directory) / "capture.jsonl"
+            args = argparse.Namespace(command="dump", output=str(capture))
+            with mock.patch.object(diagnostics, "open_selected", return_value=fake):
+                with self.assertRaises(RuntimeError):
+                    diagnostics.run_hid_command(args)
+            objects = [
+                json.loads(line) for line in capture.read_text().splitlines()
+            ]
+
+        self.assertEqual(len(objects), 1)
+        header = objects[0]
+        self.assertEqual(header["capture_status"], "partial")
+        self.assertEqual(header["freeze_reason"], "suspicious_modifiers")
+        self.assertTrue(header["frozen"])
+        self.assertEqual(header["count"], fake.count)
+        self.assertEqual(header["raw_slots"], 3)
+        self.assertEqual(header["partial_error_type"], "RuntimeError")
+        self.assertIn("timed out", header["partial_error"])
+        with self.assertRaisesRegex(ValueError, "partial dump"):
+            diagnostics.validate_capture(objects)
+
+    def test_a_dump_that_never_reads_a_slot_still_names_the_freeze(self):
+        fake = FailingProtocol2DumpDevice(answered_reads=0)
+        with tempfile.TemporaryDirectory() as directory:
+            capture = pathlib.Path(directory) / "capture.jsonl"
+            args = argparse.Namespace(command="dump", output=str(capture))
+            with mock.patch.object(diagnostics, "open_selected", return_value=fake):
+                with self.assertRaises(RuntimeError):
+                    diagnostics.run_hid_command(args)
+            objects = [
+                json.loads(line) for line in capture.read_text().splitlines()
+            ]
+
+        self.assertEqual(len(objects), 1)
+        self.assertEqual(objects[0]["capture_status"], "partial")
+        self.assertEqual(objects[0]["raw_slots"], 0)
+
+    def test_a_partial_summary_says_it_counted_nothing(self):
+        summary, _, _ = diagnostics.analyse_capture(
+            [
+                {
+                    "kind": "info",
+                    "frozen": True,
+                    "capture_status": "partial",
+                    "freeze_reason": "suspicious_modifiers",
+                }
+            ],
+            {},
+        )
+        self.assertEqual(summary["capture_status"], "partial")
+        self.assertEqual(summary["records"], 0)
+
+    def test_a_partial_capture_never_validates_as_a_window(self):
+        # A header-only protocol 2 capture is otherwise self-consistent: every
+        # slot it never read counts as an anchor the decoder consumed.
+        header = {
+            "kind": "info",
+            "frozen": True,
+            "protocol_version": 2,
+            "count": 12,
+            "next_sequence_absolute": 112,
+        }
+        self.assertTrue(diagnostics.validate_capture([dict(header)])["valid"])
+        with self.assertRaisesRegex(ValueError, "capture_status=partial"):
+            diagnostics.validate_capture([{**header, "capture_status": "partial"}])
 
     def test_validates_protocol_2_sequence_gaps_as_declared_anchors(self):
         objects = [
