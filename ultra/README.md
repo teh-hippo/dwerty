@@ -75,9 +75,11 @@ The host tests reproduce the two live default-layer mutations with test-only `&t
 
 ## Incident capture
 
-A diagnostics build keeps a 512-record RAM ring of matrix, keymap, modifier, HID and PPT events, readable over the Launcher raw HID interface. `scripts/capture-incident.sh` freezes that ring, saves it as a `.jsonl` trace beside a `.txt` metadata file, then re-arms the ring and detaches the keyboard from WSL.
+A diagnostics build keeps a 1024-record RAM ring of matrix, keymap, modifier, HID and PPT events, readable over the Launcher raw HID interface. `scripts/capture-incident.sh` freezes that ring, saves it as a `.jsonl` trace beside a `.txt` metadata file, then re-arms the ring and detaches the keyboard from WSL.
 
-Records exist in two protocol versions, and `protocol_version` in the capture header says which the firmware wrote. Protocol 1 is a fixed 12-byte record. Protocol 2 packs the same fields into 7 bytes by dropping the stored sequence, which a ring position already determines, and by replacing the absolute uptime with an 11-bit delta, because 77% of consecutive records share a millisecond. A gap too large for that field is carried by a preceding `time_skip` record. Both decode to identical JSON, so a capture reads the same either way and the ring holds about 1.7 times as much history for the same RAM.
+Records exist in two protocol versions, and `protocol_version` in the capture header says which the firmware wrote. Protocol 1 is a fixed 12-byte record. Protocol 2 packs the same fields into 7 bytes by dropping the stored sequence, which a ring position already determines, and by replacing the absolute uptime with an 11-bit delta, because 77% of consecutive records share a millisecond. Both decode to identical JSON, so a capture reads the same either way.
+
+Timing survives a wrapped ring. Every 64 records, and whenever a delta will not fit, the firmware stores a `time_skip` record holding an absolute uptime, so any retained window contains an anchor. Deltas travel with their own record, so one anchor dates a window forwards and backwards. An anchor states whether the delta it displaced was preserved; where it was not, a record that cannot be dated is marked `uptime_unknown` rather than being given a wrong time.
 
 ```bash
 ./scripts/capture-incident.sh                       # freeze, save, re-arm, detach
@@ -106,9 +108,18 @@ The summary counts presses and HID reports. A correct press produces exactly one
 | `transport_error` | A PPT queue, PPT transmit or HID send stage reported an error or discard. |
 | `modifier_latched` | A modifier bit was still set in the last report of the capture. |
 
-For a modifier latch the summary carries the decisive fields directly. `peak_modifiers` is the most modifiers the keyboard ever placed in a single report, `longest_modifier_hold` is the longest any one modifier stayed set, and `modifiers_at_freeze` lists those never released. A host showing several modifiers held while the keyboard's own peak is one or none did not get them from the keyboard.
+For a modifier latch the summary carries the decisive fields directly. `peak_modifiers` is the most modifiers the keyboard ever placed in a single report, `longest_modifier_hold` is the longest any one modifier stayed set, and `at_freeze.modifiers` lists those still set when recording stopped. A host showing several modifiers held while the keyboard's own peak is one or none did not get them from the keyboard.
 
-The firmware freezes the ring itself when a report carries four or more modifiers, recording eight further records before stopping, so the run-up to a burst is preserved rather than the aftermath. A capture whose `freeze_reason` is `suspicious_modifiers` was triggered that way rather than by hand.
+The firmware freezes the ring itself in two cases, and `freeze_reason` says which:
+
+| Reason | Trigger |
+| --- | --- |
+| `suspicious_modifiers` | A report carried five or more modifiers. Four is a chord a person can hold, so it is not treated as suspicious on its own. Eight further records are kept before stopping, preserving the run-up. |
+| `modifier_held` | A modifier stayed set for `CONFIG_DWERTY_DIAGNOSTICS_MODIFIER_HOLD_MS`, default 10 seconds. A latch emits no further reports, so it can only be noticed on a timer. Ordinary chording holds a modifier for a couple of seconds. |
+
+Nothing is recorded once the ring is frozen, so a capture must be taken and the ring re-armed before it can catch anything else.
+
+`at_freeze` is where the capture stopped, not a fault. A ring frozen on five modifiers necessarily reports five modifiers held. Judge it by `held_ms`: a latch runs for tens of seconds, an ordinary chord for a few hundred milliseconds. `truncated_releases` are likewise a boundary effect, releases whose press was overwritten before the window opened.
 
 ## The device
 

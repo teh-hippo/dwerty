@@ -110,18 +110,30 @@ def unpack_record_v2(payload):
     return event_type, payload[2], delta_ms, arg0, arg1
 
 
-def encode_records_v2(records):
-    """Encode decoded records back to protocol 2, inserting time_skip where needed."""
+TIME_SKIP_CONTINUOUS = 0x01
+
+
+def encode_records_v2(records, anchor_interval=64):
+    """Encode decoded records to protocol 2, mirroring the firmware's anchoring."""
     stream = bytearray()
     previous = None
+    since_anchor = 0
     for record in records:
         uptime = record["uptime_ms"]
         delta = 0 if previous is None else uptime - previous
-        if delta >= TIME_DELTA_ESCAPE or delta < 0:
+        continuous = previous is not None and 0 <= delta < TIME_DELTA_ESCAPE
+        if not continuous or since_anchor >= anchor_interval:
             stream += pack_record_v2(
-                18, 0, TIME_DELTA_ESCAPE, uptime & 0xFFFF, (uptime >> 16) & 0xFFFF
+                18,
+                TIME_SKIP_CONTINUOUS if continuous else 0,
+                TIME_DELTA_ESCAPE,
+                uptime & 0xFFFF,
+                (uptime >> 16) & 0xFFFF,
             )
-            delta = 0
+            since_anchor = 0
+            if not continuous:
+                delta = 0
+        since_anchor += 1
         stream += pack_record_v2(
             record["event_type"], record["flags"], delta, record["arg0"], record["arg1"]
         )
@@ -130,27 +142,88 @@ def encode_records_v2(records):
 
 
 def decode_records_v2(stream, uptime_ms=0, sequence=0):
-    """Decode a protocol 2 stream, restoring absolute uptime and sequence."""
-    records = []
-    for offset in range(0, len(stream) - RECORD_SIZE_V2 + 1, RECORD_SIZE_V2):
-        event_type, flags, delta_ms, arg0, arg1 = unpack_record_v2(
-            stream[offset:offset + RECORD_SIZE_V2]
-        )
-        if event_type == 18 and delta_ms == TIME_DELTA_ESCAPE:
-            uptime_ms = arg0 | (arg1 << 16)
+    """Decode a protocol 2 stream, restoring absolute uptime and sequence.
+
+    A wrapped ring can begin part way through, so an anchor stamps the record
+    that follows it and the records before the first anchor are recovered by
+    walking their own deltas backwards.
+    """
+    entries = [
+        unpack_record_v2(stream[offset:offset + RECORD_SIZE_V2])
+        for offset in range(0, len(stream) - RECORD_SIZE_V2 + 1, RECORD_SIZE_V2)
+    ]
+
+    def is_anchor(entry):
+        return entry[0] == 18 and entry[2] == TIME_DELTA_ESCAPE
+
+    times = {}
+    stamped = None
+    running = None
+    for index, entry in enumerate(entries):
+        if is_anchor(entry):
+            stamped = entry[3] | (entry[4] << 16)
             continue
-        uptime_ms += delta_ms
+        if stamped is not None:
+            running = stamped
+            stamped = None
+        elif running is not None:
+            running += entry[2]
+        if running is not None:
+            times[index] = running
+
+    emitted = [index for index, entry in enumerate(entries) if not is_anchor(entry)]
+    if not times:
+        running = uptime_ms
+        for index in emitted:
+            running += entries[index][2]
+            times[index] = running
+    else:
+        # Walk back through the leading records, stopping where an anchor says
+        # the delta it displaced could not be kept.
+        for position in range(len(emitted) - 1, 0, -1):
+            index, previous_index = emitted[position], emitted[position - 1]
+            if previous_index in times or index not in times:
+                continue
+            broken = any(
+                is_anchor(entries[between]) and not entries[between][1] & TIME_SKIP_CONTINUOUS
+                for between in range(previous_index + 1, index)
+            )
+            if not broken:
+                times[previous_index] = times[index] - entries[index][2]
+
+    records = []
+    for index in emitted:
+        event_type, flags, _, arg0, arg1 = entries[index]
+        # A sequence identifies a ring slot, and an anchor occupies one, so the
+        # stored index is what numbers a record rather than its output position.
+        absolute = sequence + index
         record = decode_record(
-            struct.pack(RECORD_FORMAT, sequence & 0xFFFF, event_type, flags, uptime_ms, arg0, arg1)
+            struct.pack(
+                RECORD_FORMAT,
+                absolute & 0xFFFF,
+                event_type,
+                flags,
+                times.get(index, 0),
+                arg0,
+                arg1,
+            )
         )
+        record["absolute_sequence"] = absolute
+        if index not in times:
+            record["uptime_unknown"] = True
         records.append(record)
-        sequence += 1
     return records
 
 
 def capture_schema():
     """Describe a capture well enough to be read without this source."""
     return {
+        "read_me_first": [
+            "A capture is a window cut from a ring, not a recording of an incident. "
+            "Check overwritten and freeze_reason before reading anything into it.",
+            "anomalies lists what the keyboard did wrong. at_freeze, truncated_releases "
+            "and device_state are where the window starts and stops, not faults.",
+        ],
         "protocol": {
             1: {
                 "record_size": RECORD_SIZE,
@@ -194,7 +267,9 @@ def capture_schema():
             "endpoint": "The active transport changed.",
             "freeze": "Recording stopped. reason names the cause.",
             "mark": "A host correlation marker carrying a nonce.",
-            "time_skip": "Protocol 2 only. Carries an absolute uptime when a delta overflows.",
+            "time_skip": "Protocol 2 only. An anchor holding an absolute uptime, stored "
+                         "every 64 records and whenever a delta will not fit, so a wrapped "
+                         "window can still be dated. Not emitted in decoded output.",
         },
         "matrix": {
             "state_row": STATE_ROW,
@@ -213,7 +288,8 @@ def capture_schema():
             "peak_modifiers": "The most modifiers the keyboard placed in one report.",
             "longest_modifier_hold": "The longest any single modifier stayed set.",
             "at_freeze": "Keys and modifiers still held when recording stopped. Boundary "
-                         "state, not a fault: judge it by held_ms.",
+                         "state, not a fault: judge it by held_ms. A ring frozen on five "
+                         "modifiers necessarily reports five modifiers held.",
             "truncated_releases": "Releases whose press was overwritten before the window.",
             "device_state": "Direct GPIO inputs held at the freeze.",
             "anomalies": "Counts of things the keyboard did wrong. Empty means it behaved "
@@ -933,24 +1009,37 @@ def run_hid_command(args):
             },
             output,
         )
-        if info["record_size"] != RECORD_SIZE:
+        record_size = info["record_size"]
+        if record_size not in (RECORD_SIZE, RECORD_SIZE_V2):
             raise RuntimeError(
-                f"firmware record size {info['record_size']} does not match decoder {RECORD_SIZE}"
+                f"firmware record size {record_size} does not match decoder "
+                f"{RECORD_SIZE} or {RECORD_SIZE_V2}"
             )
 
         index = 0
-        absolute_sequence = info["next_sequence_absolute"] - info["count"]
+        stream = bytearray()
         while index < info["count"]:
             response = device.exchange("read", index)
             returned = response[3]
             if returned == 0:
                 raise RuntimeError(f"firmware returned no records at index {index}")
             for offset in range(returned):
-                start = 8 + offset * RECORD_SIZE
-                record = decode_record(response[start:start + RECORD_SIZE])
-                record["absolute_sequence"] = absolute_sequence + index + offset
-                record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])
-                emit({"kind": "record", **record}, output)
+                start = 8 + offset * record_size
+                stream += response[start:start + record_size]
+            index += returned
+
+        absolute_sequence = info["next_sequence_absolute"] - info["count"]
+        if record_size == RECORD_SIZE_V2:
+            records = decode_records_v2(stream, sequence=absolute_sequence)
+        else:
+            records = []
+            for offset in range(0, len(stream), RECORD_SIZE):
+                record = decode_record(stream[offset:offset + RECORD_SIZE])
+                record["absolute_sequence"] = absolute_sequence + offset // RECORD_SIZE
+                records.append(record)
+        for record in records:
+            record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])
+            emit({"kind": "record", **record}, output)
             index += returned
     finally:
         if output:

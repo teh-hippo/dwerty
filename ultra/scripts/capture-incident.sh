@@ -9,6 +9,12 @@ Usage: capture-incident.sh [OPTIONS] [ULTRA_DIR]
 Immediately freezes and dumps the V6 Ultra diagnostic RAM trace.
 Run this before clearing the keyboard fault, rebooting or power-cycling.
 
+The ring holds about 1024 records, roughly 60 keystrokes. The firmware also
+freezes it without being asked, on a report carrying five or more modifiers or
+on a modifier held past the configured threshold. Nothing is recorded once it
+is frozen, so capture and re-arm before expecting it to catch anything else.
+The saved metadata reports the analysis, and the commands that reproduce it.
+
 ULTRA_DIR is detected from this script, the current directory, or
 ~/dwerty/ultra for the invoking user. Captures go to /mnt/shared when
 available, or the current directory. Set DWERTY_CAPTURE_DIR to override.

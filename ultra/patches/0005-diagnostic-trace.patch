@@ -11,10 +11,10 @@ index 884b3d3..e8cd8c3 100644
  target_sources(app PRIVATE src/behavior.c)
  target_sources(app PRIVATE src/kscan.c)
 diff --git a/app/Kconfig b/app/Kconfig
-index b6776f0..aa53837 100644
+index b6776f0..1b91a67 100644
 --- a/app/Kconfig
 +++ b/app/Kconfig
-@@ -674,6 +674,29 @@ config LAUNCHER_USER_SET_DEBOUNCE
+@@ -674,6 +674,39 @@ config LAUNCHER_USER_SET_DEBOUNCE
      default n
  endif
  
@@ -31,6 +31,16 @@ index b6776f0..aa53837 100644
 +    depends on DWERTY_DIAGNOSTICS
 +    range 64 1024
 +    default 512
++
++config DWERTY_DIAGNOSTICS_MODIFIER_HOLD_MS
++    int "Freeze the trace after a modifier stays down this long"
++    depends on DWERTY_DIAGNOSTICS
++    range 1000 600000
++    default 10000
++    help
++      A latched modifier emits no further reports, so it is caught on a timer
++      rather than by an event. Ordinary chording holds a modifier for a couple
++      of seconds; a recorded latch lasts tens of seconds.
 +
 +config DWERTY_DIAGNOSTICS_UART
 +    bool "Stream Dwerty diagnostic records over UART2"
@@ -110,10 +120,10 @@ index 877c0c2..32e1ec1 100644
              //     LOG_DBG("row:%d,pin:%d,col:%d,active:%d,port:%x",j,in_gpio->spec.pin,col,active,port);
 diff --git a/app/module/include/zmk/dwerty_diag.h b/app/module/include/zmk/dwerty_diag.h
 new file mode 100644
-index 0000000..4c66a99
+index 0000000..9b5fc89
 --- /dev/null
 +++ b/app/module/include/zmk/dwerty_diag.h
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,56 @@
 +#pragma once
 +
 +#include <stddef.h>
@@ -139,6 +149,7 @@ index 0000000..4c66a99
 +    DWERTY_DIAG_EVENT_ENDPOINT = 15,
 +    DWERTY_DIAG_EVENT_FREEZE = 16,
 +    DWERTY_DIAG_EVENT_MARK = 17,
++    DWERTY_DIAG_EVENT_TIME_SKIP = 18,
 +};
 +
 +enum dwerty_diag_freeze_reason {
@@ -148,6 +159,7 @@ index 0000000..4c66a99
 +    DWERTY_DIAG_FREEZE_PPT_OVERFLOW = 4,
 +    DWERTY_DIAG_FREEZE_PPT_SEND = 5,
 +    DWERTY_DIAG_FREEZE_MODIFIER_UNDERFLOW = 6,
++    DWERTY_DIAG_FREEZE_MODIFIER_HELD = 7,
 +};
 +
 +#define DWERTY_DIAG_FLAG_PRESSED BIT(0)
@@ -170,10 +182,10 @@ index 0000000..4c66a99
 +#endif
 diff --git a/app/src/dwerty_diag.c b/app/src/dwerty_diag.c
 new file mode 100644
-index 0000000..1d7ea53
+index 0000000..bad08e6
 --- /dev/null
 +++ b/app/src/dwerty_diag.c
-@@ -0,0 +1,345 @@
+@@ -0,0 +1,413 @@
 +#include <zephyr/device.h>
 +#include <zephyr/init.h>
 +#include <zephyr/kernel.h>
@@ -190,7 +202,7 @@ index 0000000..1d7ea53
 +#include <zmk/dwerty_diag.h>
 +
 +#define DWERTY_DIAG_COMMAND 0xD0
-+#define DWERTY_DIAG_PROTOCOL_VERSION 1
++#define DWERTY_DIAG_PROTOCOL_VERSION 2
 +#define DWERTY_DIAG_SUBCOMMAND_INFO 0
 +#define DWERTY_DIAG_SUBCOMMAND_READ 1
 +#define DWERTY_DIAG_SUBCOMMAND_ARM 2
@@ -201,16 +213,27 @@ index 0000000..1d7ea53
 +#define DWERTY_DIAG_UART_MAGIC_0 0xD7
 +#define DWERTY_DIAG_UART_MAGIC_1 0x59
 +
++/* byte 0 = type[4:0] | delta[10:8] << 5, byte 1 = delta[7:0], byte 2 = flags,
++ * bytes 3-4 = arg0, bytes 5-6 = arg1. The sequence is not stored because a
++ * ring position determines it, and an uptime is held as a delta because most
++ * consecutive records share a millisecond. A delta that will not fit is
++ * carried by a preceding TIME_SKIP record holding the absolute uptime. */
++#define DWERTY_DIAG_RECORD_SIZE 7
++#define DWERTY_DIAG_TIME_DELTA_ESCAPE 0x7FF
++/* A wrapped ring can lose the record a delta was measured against, so an
++ * absolute uptime is repeated often enough that any retained window holds one.
++ * Deltas travel with their own record, so one anchor dates a window in both
++ * directions. */
++#define DWERTY_DIAG_TIME_ANCHOR_INTERVAL 64
++/* Set when the record after an anchor still carries a true delta, so a reader
++ * can walk backwards through the anchor. Clear when the delta did not fit. */
++#define DWERTY_DIAG_TIME_SKIP_CONTINUOUS BIT(0)
++
 +struct dwerty_diag_record {
-+    uint16_t sequence;
-+    uint8_t type;
-+    uint8_t flags;
-+    uint32_t uptime_ms;
-+    uint16_t arg0;
-+    uint16_t arg1;
++    uint8_t bytes[DWERTY_DIAG_RECORD_SIZE];
 +} __packed;
 +
-+BUILD_ASSERT(sizeof(struct dwerty_diag_record) == 12);
++BUILD_ASSERT(sizeof(struct dwerty_diag_record) == DWERTY_DIAG_RECORD_SIZE);
 +BUILD_ASSERT(CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE <= UINT16_MAX);
 +
 +static struct dwerty_diag_record records[CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE];
@@ -218,6 +241,8 @@ index 0000000..1d7ea53
 +static uint16_t head;
 +static uint16_t count;
 +static uint32_t next_sequence;
++static uint32_t last_uptime_ms;
++static uint16_t since_anchor;
 +static uint32_t overwritten;
 +static bool frozen;
 +static uint8_t freeze_reason;
@@ -292,17 +317,16 @@ index 0000000..1d7ea53
 +
 +#endif
 +
-+static void dwerty_diag_append_locked(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1,
-+                                      struct dwerty_diag_record *record) {
-+    *record = (struct dwerty_diag_record){
-+        .sequence = (uint16_t)next_sequence++,
-+        .type = type,
-+        .flags = flags,
-+        .uptime_ms = k_uptime_get_32(),
-+        .arg0 = arg0,
-+        .arg1 = arg1,
-+    };
++static void dwerty_diag_pack(struct dwerty_diag_record *record, uint8_t type, uint8_t flags,
++                             uint16_t delta_ms, uint16_t arg0, uint16_t arg1) {
++    record->bytes[0] = (uint8_t)((type & 0x1F) | ((delta_ms >> 8) << 5));
++    record->bytes[1] = (uint8_t)delta_ms;
++    record->bytes[2] = flags;
++    sys_put_le16(arg0, &record->bytes[3]);
++    sys_put_le16(arg1, &record->bytes[5]);
++}
 +
++static void dwerty_diag_store_locked(const struct dwerty_diag_record *record) {
 +    if (count == CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE) {
 +        head = (head + 1) % CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE;
 +        overwritten++;
@@ -312,7 +336,48 @@ index 0000000..1d7ea53
 +
 +    uint16_t index = (head + count - 1) % CONFIG_DWERTY_DIAGNOSTICS_BUFFER_SIZE;
 +    records[index] = *record;
++    next_sequence++;
 +}
++
++static void dwerty_diag_append_locked(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1,
++                                      struct dwerty_diag_record *record) {
++    uint32_t now = k_uptime_get_32();
++    uint32_t delta = now - last_uptime_ms;
++
++    bool continuous = count != 0 && delta < DWERTY_DIAG_TIME_DELTA_ESCAPE;
++
++    if (!continuous || since_anchor >= DWERTY_DIAG_TIME_ANCHOR_INTERVAL) {
++        struct dwerty_diag_record skip;
++
++        dwerty_diag_pack(&skip, DWERTY_DIAG_EVENT_TIME_SKIP,
++                         continuous ? DWERTY_DIAG_TIME_SKIP_CONTINUOUS : 0,
++                         DWERTY_DIAG_TIME_DELTA_ESCAPE, (uint16_t)now, (uint16_t)(now >> 16));
++        dwerty_diag_store_locked(&skip);
++        since_anchor = 0;
++        if (!continuous) {
++            delta = 0;
++        }
++    }
++    since_anchor++;
++
++    last_uptime_ms = now;
++    dwerty_diag_pack(record, type, flags, (uint16_t)delta, arg0, arg1);
++    dwerty_diag_store_locked(record);
++}
++
++static bool modifiers_held;
++
++/* No report is emitted while a modifier simply stays down, so a latch can only
++ * be noticed on a timer. Every recorded incident held modifiers for tens of
++ * seconds, an order above ordinary chording. */
++static void dwerty_diag_modifier_hold(struct k_work *work) {
++    ARG_UNUSED(work);
++    if (modifiers_held) {
++        dwerty_diag_freeze(DWERTY_DIAG_FREEZE_MODIFIER_HELD);
++    }
++}
++
++static K_WORK_DELAYABLE_DEFINE(modifier_hold_work, dwerty_diag_modifier_hold);
 +
 +void dwerty_diag_record(uint8_t type, uint8_t flags, uint16_t arg0, uint16_t arg1) {
 +    struct dwerty_diag_record record;
@@ -373,13 +438,24 @@ index 0000000..1d7ea53
 +    dwerty_diag_record(DWERTY_DIAG_EVENT_HID_REPORT, transport, state,
 +                       dwerty_diag_crc16(report, len));
 +
-+    if (__builtin_popcount((unsigned int)modifiers) >= 4) {
++    /* Four modifiers is a chord a person can hold, so only a wider set is
++     * treated as suspicious on its own. A latch is caught by duration instead. */
++    if (__builtin_popcount((unsigned int)modifiers) >= 5) {
 +        k_spinlock_key_t key = k_spin_lock(&lock);
 +        if (!frozen && trigger_remaining == 0) {
 +            trigger_reason = DWERTY_DIAG_FREEZE_SUSPICIOUS_MODIFIERS;
 +            trigger_remaining = 8;
 +        }
 +        k_spin_unlock(&lock, key);
++    }
++
++    if (modifiers != 0 && !modifiers_held) {
++        modifiers_held = true;
++        k_work_schedule(&modifier_hold_work,
++                        K_MSEC(CONFIG_DWERTY_DIAGNOSTICS_MODIFIER_HOLD_MS));
++    } else if (modifiers == 0 && modifiers_held) {
++        modifiers_held = false;
++        k_work_cancel_delayable(&modifier_hold_work);
 +    }
 +}
 +
@@ -397,6 +473,8 @@ index 0000000..1d7ea53
 +    head = 0;
 +    count = 0;
 +    next_sequence = 0;
++    last_uptime_ms = 0;
++    since_anchor = 0;
 +    overwritten = 0;
 +    frozen = false;
 +    freeze_reason = 0;
@@ -449,7 +527,9 @@ index 0000000..1d7ea53
 +}
 +
 +static void dwerty_diag_fill_records(uint8_t *data, uint16_t requested_index) {
-+    struct dwerty_diag_record result[2];
++    struct dwerty_diag_record result[(DWERTY_DIAG_REPORT_SIZE -
++                                      DWERTY_DIAG_READ_HEADER_SIZE) /
++                                     DWERTY_DIAG_RECORD_SIZE];
 +    uint8_t returned = 0;
 +
 +    k_spinlock_key_t key = k_spin_lock(&lock);

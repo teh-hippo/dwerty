@@ -516,16 +516,32 @@ class RecordCodecTest(unittest.TestCase):
             {"event_type": 4, "flags": 0, "uptime_ms": 900000, "arg0": 3, "arg1": 4},
         ]
         stream = diagnostics.encode_records_v2(records)
-        self.assertEqual(len(stream), 3 * diagnostics.RECORD_SIZE_V2)
-        decoded = diagnostics.decode_records_v2(stream, uptime_ms=1000)
+        # An anchor opens the stream and a second carries the overlong gap.
+        self.assertEqual(len(stream), 4 * diagnostics.RECORD_SIZE_V2)
+        decoded = diagnostics.decode_records_v2(stream)
         self.assertEqual([item["uptime_ms"] for item in decoded], [1000, 900000])
         self.assertEqual([item["event"] for item in decoded], ["matrix_raw", "kscan"])
+
+    def test_dates_a_window_that_lost_its_opening_records(self):
+        records = [
+            {"event_type": 3, "flags": 0, "uptime_ms": 5000 + step * 7, "arg0": step, "arg1": 0}
+            for step in range(200)
+        ]
+        stream = diagnostics.encode_records_v2(records, anchor_interval=64)
+        wrapped = stream[70 * diagnostics.RECORD_SIZE_V2:]
+        decoded = diagnostics.decode_records_v2(wrapped)
+        self.assertTrue(decoded)
+        self.assertFalse(any(item.get("uptime_unknown") for item in decoded))
+        tail = [item["uptime_ms"] for item in decoded]
+        self.assertEqual(tail, [item["uptime_ms"] for item in records][-len(tail):])
 
     def test_round_trips_a_real_capture_without_loss(self):
         captures = sorted(self.CAPTURES.glob("dwerty-incident-*.jsonl"))
         if not captures:
             self.skipTest("no saved capture available")
-        ignored = {"kind", "absolute_sequence", "recorded_at"}
+        # A protocol 2 sequence counts the time anchors it stores, so slot
+        # numbers legitimately differ from a protocol 1 capture's.
+        ignored = {"kind", "absolute_sequence", "recorded_at", "sequence"}
         for path in captures:
             original = [
                 json.loads(line)
@@ -539,6 +555,11 @@ class RecordCodecTest(unittest.TestCase):
                 sequence=original[0]["sequence"],
             )
             self.assertEqual(len(restored), len(original), path.name)
+            self.assertEqual(
+                [item["uptime_ms"] for item in restored],
+                [item["uptime_ms"] for item in original],
+                path.name,
+            )
             for before, after in zip(original, restored):
                 self.assertEqual(
                     {k: v for k, v in before.items() if k not in ignored},
