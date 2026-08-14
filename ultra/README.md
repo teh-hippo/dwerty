@@ -73,6 +73,32 @@ Both need [Podman](https://podman.io), or Docker if you set `DWERTY_CONTAINER_EN
 
 The host tests reproduce the two live default-layer mutations with test-only `&to` sentinels. They execute the byte-identical upstream release-routing and mod-morph code with the production release fix applied. Settings persistence, GPIO timing, PPT scheduling, the Realtek radio stack and dongle firmware remain outside host-simulation coverage.
 
+## Incident capture
+
+A diagnostics build keeps a 512-record RAM ring of matrix, keymap, modifier, HID and PPT events, readable over the Launcher raw HID interface. `scripts/capture-incident.sh` freezes that ring, saves it as a `.jsonl` trace beside a `.txt` metadata file, then re-arms the ring and detaches the keyboard from WSL.
+
+```bash
+./scripts/capture-incident.sh                       # freeze, save, re-arm, detach
+./scripts/diagnostics.py analyse CAPTURE.jsonl      # summary and anomalies
+./scripts/diagnostics.py analyse --presses CAPTURE.jsonl
+```
+
+`analyse` names every position from [`config/keychron_v6_ultra_ansi.keymap`](config/keychron_v6_ultra_ansi.keymap) using the layer the firmware recorded, so a trace reads as bindings rather than matrix coordinates. It reports the capture window in wall-clock time, derived from the device uptime and the host clock at the freeze, which is what lets a firmware trace be lined up against a host-side log.
+
+The ring holds about 31 keystrokes, so it must be frozen before anything else is typed. `overwritten` in the summary counts the records already lost.
+
+The summary counts presses and HID reports. A correct press produces exactly one report on its press edge and one on its release, which is what separates a keyboard fault from a host one: if the firmware emitted one report for a key but the host received several characters, the extra characters did not come from the keyboard. These faults are reported by name:
+
+| Anomaly | Meaning |
+| --- | --- |
+| `contact_bounce_absorbed` | The switch bounced and the debouncer filtered it. Hardware wear, no output error. |
+| `repeat_without_raw_release` | A debounced repeat arrived while the raw matrix still read closed, which no real second press can produce. |
+| `press_without_release` | A position was pressed twice with no release routed between. |
+| `release_without_press` | A release was routed for a position that was not held. |
+| `held_at_freeze` | The key was still held when the ring was frozen. |
+| `modifier_error` | The firmware's modifier refcount underflowed. |
+| `kscan_drop` | The scan queue discarded an event. |
+
 ## The device
 
 | Item | Value |

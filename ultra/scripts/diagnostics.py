@@ -2,11 +2,13 @@
 """Read and decode the V6 Ultra diagnostic trace."""
 
 import argparse
+import collections
 import datetime as dt
 import glob
 import json
 import os
 import pathlib
+import re
 import secrets
 import select
 import struct
@@ -56,6 +58,8 @@ FREEZE_REASONS = {
 }
 TRANSPORTS = {0: "usb", 1: "ble", 2: "ppt"}
 MODIFIERS = ("lctrl", "lshift", "lalt", "lgui", "rctrl", "rshift", "ralt", "rgui")
+KEYMAP_NAME = "keychron_v6_ultra_ansi.keymap"
+LAYER_PATTERN = re.compile(r"(\w+)\s*\{[^{}]*?(?<![-\w])bindings\s*=\s*<(.*?)>\s*;", re.S)
 
 
 def crc16(data):
@@ -165,6 +169,240 @@ def decode_record(payload):
         result["nonce"] = arg0 | (arg1 << 16)
 
     return result
+
+
+def wall_clock(boot_at, uptime_ms):
+    return (boot_at + dt.timedelta(milliseconds=uptime_ms)).isoformat()
+
+
+def strip_comments(text):
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return re.sub(r"//[^\n]*", " ", text)
+
+
+def keymap_node(text):
+    """Return the source of the `zmk,keymap` node, excluding behaviour definitions."""
+    marker = text.find('compatible = "zmk,keymap"')
+    if marker < 0:
+        raise SystemExit("The keymap file contains no zmk,keymap node.")
+    start = text.rfind("{", 0, marker)
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index]
+    raise SystemExit("The zmk,keymap node is not closed.")
+
+
+def keymap_layers(path):
+    """Return each layer's binding cells, indexed by the layer number the firmware reports."""
+    node = keymap_node(strip_comments(pathlib.Path(path).read_text(encoding="utf-8")))
+    layers = []
+    for name, body in LAYER_PATTERN.findall(node):
+        cells = [" ".join(("&" + cell).split()) for cell in body.split("&") if cell.strip()]
+        layers.append({"layer": len(layers), "name": name, "bindings": cells})
+    return layers
+
+
+def binding_at(layers, layer, position):
+    if position is None or layer is None:
+        return None
+    if layer < len(layers) and position < len(layers[layer]["bindings"]):
+        return layers[layer]["bindings"][position]
+    return None
+
+
+def capture_boot(info):
+    """Recover the device boot instant so records share a timebase with host logs."""
+    if info.get("boot_at"):
+        return dt.datetime.fromisoformat(info["boot_at"])
+    if info.get("captured_at") and info.get("uptime_ms") is not None:
+        captured = dt.datetime.fromisoformat(info["captured_at"])
+        return captured - dt.timedelta(milliseconds=info["uptime_ms"])
+    return None
+
+
+def analyse_capture(objects, layers):
+    """Report per-press evidence and the structural faults a capture can prove."""
+    info = next((item for item in objects if item.get("kind") == "info"), {})
+    records = [item for item in objects if item.get("kind") == "record"]
+    boot_at = capture_boot(info)
+
+    def moment(record):
+        if record.get("recorded_at"):
+            return record["recorded_at"]
+        return wall_clock(boot_at, record["uptime_ms"]) if boot_at else None
+
+    def describe(record=None, position=None, layer=None):
+        record = record or {}
+        if position is None:
+            position = record.get("position")
+        if layer is None:
+            layer = record.get("default_layer")
+        return {"position": position, "binding": binding_at(layers, layer, position)}
+
+    raw_edges = collections.Counter()
+    scan_edges = collections.Counter()
+    positions = {}
+    coordinates = {}
+    scanned = set()
+    released = set()
+    repeats = []
+    for record in records:
+        key = (record.get("row"), record.get("column"))
+        if record["event"] == "position":
+            positions[key] = record["position"]
+            coordinates[record["position"]] = key
+        elif record["event"] == "matrix_raw":
+            if record["pressed"]:
+                raw_edges[key] += 1
+            else:
+                released.add(key)
+        elif record["event"] == "kscan" and record["pressed"]:
+            scan_edges[key] += 1
+            if key in scanned and key not in released:
+                repeats.append((key, record))
+            scanned.add(key)
+            released.discard(key)
+
+    def reports_for_edge(index):
+        """Count the reports a single key edge produced, before the next edge is routed."""
+        count = 0
+        for item in records[index + 1:]:
+            if item["event"] == "keymap":
+                break
+            if item["event"] == "hid_report":
+                count += 1
+        return count
+
+    presses = []
+    anomalies = []
+    held = {}
+    reports = 0
+    modifier_depth = 0
+    default_layer = None
+    for index, record in enumerate(records):
+        event = record["event"]
+        if event == "hid_report":
+            reports += 1
+        elif event == "modifier":
+            modifier_depth = record["count"]
+            if record["error"]:
+                anomalies.append(
+                    {
+                        "anomaly": "modifier_error",
+                        "at": moment(record),
+                        "modifier": record["modifier"],
+                        "count": record["count"],
+                        "report_modifiers": record["report_modifiers"],
+                    }
+                )
+        elif event == "kscan_drop":
+            anomalies.append({"anomaly": "kscan_drop", "at": moment(record), **describe(record)})
+        elif event == "keymap":
+            default_layer = record["default_layer"]
+            position = record["position"]
+            if record["pressed"]:
+                if position in held:
+                    anomalies.append(
+                        {
+                            "anomaly": "press_without_release",
+                            "at": moment(record),
+                            **describe(record),
+                        }
+                    )
+                held[position] = (index, record)
+            elif position not in held:
+                anomalies.append(
+                    {"anomaly": "release_without_press", "at": moment(record), **describe(record)}
+                )
+            else:
+                start_index, down = held.pop(position)
+                key = coordinates.get(position)
+                matrix = [
+                    item
+                    for item in records[start_index:index]
+                    if item["event"] == "matrix_raw" and (item["row"], item["column"]) == key
+                ]
+                presses.append(
+                    {
+                        "kind": "press",
+                        "at": moment(down),
+                        "released_at": moment(record),
+                        "held_ms": record["uptime_ms"] - down["uptime_ms"],
+                        "layer": down["default_layer"],
+                        "press_reports": reports_for_edge(start_index),
+                        "release_reports": reports_for_edge(index),
+                        "matrix_edges_while_down": len(matrix),
+                        **describe(down),
+                    }
+                )
+
+    for key, record in repeats:
+        anomalies.append(
+            {
+                "anomaly": "repeat_without_raw_release",
+                "at": moment(record),
+                "row": key[0],
+                "column": key[1],
+                **describe(position=positions.get(key), layer=default_layer),
+            }
+        )
+
+    for key, count in sorted(raw_edges.items()):
+        if count > scan_edges[key]:
+            anomalies.append(
+                {
+                    "anomaly": "contact_bounce_absorbed",
+                    "row": key[0],
+                    "column": key[1],
+                    "raw_presses": count,
+                    "debounced_presses": scan_edges[key],
+                    **describe(position=positions.get(key), layer=default_layer),
+                }
+            )
+
+    for position, (_, down) in sorted(held.items()):
+        anomalies.append({"anomaly": "held_at_freeze", "at": moment(down), **describe(down)})
+
+    summary = {
+        "kind": "summary",
+        "records": len(records),
+        "window_start": moment(records[0]) if records else None,
+        "window_end": moment(records[-1]) if records else None,
+        "window_ms": records[-1]["uptime_ms"] - records[0]["uptime_ms"] if records else 0,
+        "presses": len(presses),
+        "hid_reports": reports,
+        "overwritten": info.get("overwritten"),
+        "freeze_reason": info.get("freeze_reason"),
+        "trigger_reason": info.get("trigger_reason"),
+        "boot_at": boot_at.isoformat() if boot_at else None,
+        "boot_uncertainty_ms": info.get("boot_uncertainty_ms"),
+        "modifier_depth_at_freeze": modifier_depth,
+        "anomalies": collections.Counter(item["anomaly"] for item in anomalies),
+    }
+    return summary, presses, anomalies
+
+
+def run_analyse(args):
+    objects = [
+        json.loads(line)
+        for line in pathlib.Path(args.capture).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    keymap = args.keymap or pathlib.Path(__file__).parents[1] / "config" / KEYMAP_NAME
+    layers = keymap_layers(keymap)
+    summary, presses, anomalies = analyse_capture(objects, layers)
+    summary["anomalies"] = dict(summary["anomalies"])
+    emit(summary, None)
+    if args.presses:
+        for press in presses:
+            emit(press, None)
+    for anomaly in anomalies:
+        emit({"kind": "anomaly", **anomaly}, None)
 
 
 def parse_info(data):
@@ -428,11 +666,16 @@ def run_hid_command(args):
             return
 
         device.exchange("freeze")
+        before = dt.datetime.now(dt.timezone.utc)
         info = parse_info(device.exchange("info"))
+        after = dt.datetime.now(dt.timezone.utc)
+        boot_at = before + (after - before) / 2 - dt.timedelta(milliseconds=info["uptime_ms"])
         emit(
             {
                 "kind": "info",
-                "captured_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "captured_at": after.isoformat(),
+                "boot_at": boot_at.isoformat(),
+                "boot_uncertainty_ms": (after - before) / dt.timedelta(milliseconds=1),
                 **info,
             },
             output,
@@ -453,6 +696,7 @@ def run_hid_command(args):
                 start = 8 + offset * RECORD_SIZE
                 record = decode_record(response[start:start + RECORD_SIZE])
                 record["absolute_sequence"] = absolute_sequence + index + offset
+                record["recorded_at"] = wall_clock(boot_at, record["uptime_ms"])
                 emit({"kind": "record", **record}, output)
             index += returned
     finally:
@@ -523,6 +767,10 @@ def main():
     serial_parser = subparsers.add_parser("serial")
     serial_parser.add_argument("--port", required=True)
     serial_parser.add_argument("--baud", type=int, default=2_000_000)
+    analyse_parser = subparsers.add_parser("analyse")
+    analyse_parser.add_argument("capture")
+    analyse_parser.add_argument("--keymap")
+    analyse_parser.add_argument("--presses", action="store_true")
 
     args = parser.parse_args()
     if args.command == "list":
@@ -530,6 +778,8 @@ def main():
             print(json.dumps(device_summary(index, device), sort_keys=True))
     elif args.command == "serial":
         run_serial(args)
+    elif args.command == "analyse":
+        run_analyse(args)
     else:
         run_hid_command(args)
 
