@@ -60,6 +60,10 @@ TRANSPORTS = {0: "usb", 1: "ble", 2: "ppt"}
 MODIFIERS = ("lctrl", "lshift", "lalt", "lgui", "rctrl", "rshift", "ralt", "rgui")
 KEYMAP_NAME = "keychron_v6_ultra_ansi.keymap"
 LAYER_PATTERN = re.compile(r"(\w+)\s*\{[^{}]*?(?<![-\w])bindings\s*=\s*<(.*?)>\s*;", re.S)
+# The shield composes a direct-GPIO kscan at row-offset 6 for the Mac/Win slide,
+# the transport selectors, USB detection and charging. Those inputs hold their
+# state indefinitely by design, so they are device state rather than keystrokes.
+STATE_ROW = 6
 
 
 def crc16(data):
@@ -263,7 +267,7 @@ def analyse_capture(objects, layers):
                 released.add(key)
         elif record["event"] == "kscan" and record["pressed"]:
             scan_edges[key] += 1
-            if key in scanned and key not in released:
+            if key[0] != STATE_ROW and key in scanned and key not in released:
                 repeats.append((key, record))
             scanned.add(key)
             released.discard(key)
@@ -280,6 +284,7 @@ def analyse_capture(objects, layers):
 
     presses = []
     anomalies = []
+    state_changes = []
     held = {}
     reports = 0
     modifier_depth = 0
@@ -322,6 +327,15 @@ def analyse_capture(objects, layers):
             else:
                 start_index, down = held.pop(position)
                 key = coordinates.get(position)
+                if key and key[0] == STATE_ROW:
+                    state_changes.append(
+                        {
+                            "at": moment(down),
+                            "cleared_at": moment(record),
+                            **describe(down),
+                        }
+                    )
+                    continue
                 matrix = [
                     item
                     for item in records[start_index:index]
@@ -365,8 +379,13 @@ def analyse_capture(objects, layers):
                 }
             )
 
+    device_state = []
     for position, (_, down) in sorted(held.items()):
-        anomalies.append({"anomaly": "held_at_freeze", "at": moment(down), **describe(down)})
+        key = coordinates.get(position)
+        if key and key[0] == STATE_ROW:
+            device_state.append(binding_at(layers, down["default_layer"], position))
+        else:
+            anomalies.append({"anomaly": "held_at_freeze", "at": moment(down), **describe(down)})
 
     summary = {
         "kind": "summary",
@@ -382,6 +401,8 @@ def analyse_capture(objects, layers):
         "boot_at": boot_at.isoformat() if boot_at else None,
         "boot_uncertainty_ms": info.get("boot_uncertainty_ms"),
         "modifier_depth_at_freeze": modifier_depth,
+        "device_state": device_state,
+        "device_state_changes": state_changes,
         "anomalies": collections.Counter(item["anomaly"] for item in anomalies),
     }
     return summary, presses, anomalies

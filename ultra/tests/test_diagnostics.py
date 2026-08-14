@@ -367,6 +367,44 @@ class CaptureAnalysisTest(unittest.TestCase):
         _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
         self.assertEqual([item["anomaly"] for item in anomalies], ["release_without_press"])
 
+    def test_treats_the_direct_gpio_row_as_device_state(self):
+        capture = [
+            {
+                "kind": "record",
+                "event": "position",
+                "uptime_ms": 100,
+                "position": 112,
+                "row": diagnostics.STATE_ROW,
+                "column": 3,
+                "pressed": True,
+            },
+            keymap_event(100, 112, True),
+        ]
+        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(presses, [])
+        self.assertEqual(anomalies, [])
+        self.assertEqual(summary["device_state"], ["&kc SEL_USB"])
+
+    def test_records_a_device_state_input_that_changed_mid_capture(self):
+        capture = [
+            {
+                "kind": "record",
+                "event": "position",
+                "uptime_ms": 100,
+                "position": 109,
+                "row": diagnostics.STATE_ROW,
+                "column": 0,
+                "pressed": True,
+            },
+            keymap_event(100, 109, True),
+            keymap_event(900, 109, False),
+        ]
+        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        self.assertEqual(presses, [])
+        self.assertEqual(anomalies, [])
+        self.assertEqual(summary["device_state"], [])
+        self.assertEqual([item["binding"] for item in summary["device_state_changes"]], ["&none"])
+
     def test_a_dump_dates_every_record_against_the_host_clock(self):
         fake = FakeDumpDevice(uptime_ms=60000, record_uptime_ms=20000)
         with tempfile.TemporaryDirectory() as directory:
