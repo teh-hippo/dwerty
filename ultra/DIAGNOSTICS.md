@@ -164,13 +164,15 @@ A capture covers matrix sampling through the keyboard handing a report to a tran
 
 The four incident modifiers are all on row 5, but the HID modifier byte is independent of matrix topology. That gives the strongest discriminator.
 
-| Observation | Supported conclusion |
+| Evidence | Supported conclusion |
 |---|---|
 | `matrix_raw` shows uncommanded row-5 transitions, including non-modifier row-5 keys, and a logic analyser or oscilloscope sees the same electrical assertion | The fault is at the switch, PCB, diode, row drive or GPIO input. Firmware is reporting the sampled hardware state. |
-| Electrical probes remain clean, but `matrix_raw` reports a press | The first divergence is the MCU sampling or matrix driver, not the switch network. |
-| Matrix and keymap records are clean, but modifier counts or `hid_report` form an unexplained modifier byte | The first divergence is keyboard firmware state. |
-| The keyboard's `hid_report` is clean, but an inline USB capture from the receiver contains the bad modifier byte | The first divergence is after keyboard report formation, in PPT, RF or receiver firmware. |
-| Receiver USB packets are clean, but Windows Raw Input or application state is wrong | The first divergence is in the host stack, a filter or the monitor's correlation. |
+| Electrical probes show no assertion on the row drive or the affected column inputs, but `matrix_raw` reports a press | The first divergence is the MCU sampling or matrix driver, not the switch network. |
+| Matrix and keymap records account for every transition, but modifier counts or `hid_report` form an unexplained modifier byte | The first divergence is keyboard firmware state. |
+| The keyboard's `hid_report` carries the modifier byte the keys pressed account for, but an inline USB capture from the receiver contains the bad byte | The first divergence is after keyboard report formation, in PPT, RF or receiver firmware. |
+| Receiver USB packets carry that same accounted-for modifier byte, but Windows Raw Input or application state is wrong | The first divergence is in the host stack, a filter or the monitor's correlation. |
+
+Every row's left column is a negative bounded by one capture window on one layer. No divergence observed is not no fault present: a layer that showed nothing during the window can still fail outside it, and the window itself may have been overwritten before it opened. Read each row as locating the first divergence the captures could see, not as clearing the layers below it.
 
 A raw matrix transition alone is not definitive hardware proof because a GPIO sampling or memory fault can fabricate it. Strong hardware attribution requires an independent electrical capture on the row drive and affected column inputs, synchronised with the trace.
 
@@ -197,4 +199,4 @@ Capture the host and USB layers at the same time as the firmware trace. The `mar
 4. Export the connected Keyboard, HIDClass and USB device trees with parent and container IDs. Save keyboard and HID class `UpperFilters` and `LowerFilters`, `pnputil /enum-drivers`, `pnputil /enum-devices /connected /class Keyboard /related`, and `driverquery /v /fo csv`.
 5. Flag software or root-enumerated keyboards and Virtual HID Framework devices. `NotInjected` on a low-level hook does not exclude a kernel filter or virtual HID source.
 
-An inline hardware USB analyser is stronger than USBPcap because it observes receiver wire output outside Windows. USBPcap showing a bad modifier byte proves that the host received it from the receiver, but cannot by itself distinguish keyboard firmware, RF transport and receiver firmware. Conversely, a clean USB transfer with a bad Raw Input or application state localises the divergence to Windows or software above the USB transport.
+An inline hardware USB analyser is stronger than USBPcap because it observes receiver wire output outside Windows. USBPcap showing a bad modifier byte proves that the host received it from the receiver, but cannot by itself distinguish keyboard firmware, RF transport and receiver firmware. Conversely, a USB transfer carrying the accounted-for modifier byte, with a bad Raw Input or application state, localises the divergence to Windows or software above the USB transport.
