@@ -79,6 +79,10 @@ Bind the capture to a pointer-driven launcher so that collecting it costs no key
 
 Trace files contain physical key positions and timing. Treat them as sensitive input data, minimise retention, and do not publish an unreviewed capture.
 
+The firmware records positions and matrix coordinates, never key identity, and `diagnostics.py analyse` keeps that boundary by default. It names modifiers, layer switches and device-state inputs, because those are the subject of the investigation and carry no typed content, and reduces an ordinary key to its position, its matrix coordinate and a `binding_class`. `--reveal-keys` renders the identity when a local reader needs it. That is a presentation boundary, not protection: a capture's positions and timing reconstruct typed input once they are read against this repository's keymap, so a capture is sensitive whether or not identity was rendered.
+
+Collecting and interpreting are separate. `capture-incident.sh` reports the capture's status, the firmware's ring accounting and where the files went, and states the layer that evidence covers. It does not decide whether the capture represents an incident, because a keyboard-side window cannot: that decision needs the raw timing, the operator's account and evidence from the receiver, USB and Windows layers. The sidecar records the `analyse` command to run afterwards.
+
 `scripts/capture-incident.sh` is the field runbook in executable form. It
 recognises the known V6 Ultra wired PID `3434:0C60` and receiver PID
 `3434:D028`, preferring the receiver so a wireless trace can be retrieved
@@ -155,6 +159,8 @@ The trace also closes a smaller reliability gap found during this review: PPT ca
 The HID record deliberately does not retain key bytes. Use the preceding `position` and `keymap` events to identify the semantic key, and the HID CRC to match the complete report to a privacy-controlled USB capture.
 
 ## What would prove each layer
+
+A capture covers matrix sampling through the keyboard handing a report to a transport, which is what `evidence_boundary` in the summary states. It says nothing about radio delivery, the receiver, receiver USB, Windows or the receiving application. A `hid_send` the firmware recorded as successful shows that the keyboard released the report, not that anything downstream delivered it, and a capture with no observations at all is consistent with a fault at any of those layers or before the retained window opened.
 
 The four incident modifiers are all on row 5, but the HID modifier byte is independent of matrix topology. That gives the strongest discriminator.
 

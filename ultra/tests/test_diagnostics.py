@@ -1,6 +1,8 @@
 import argparse
+import contextlib
 import datetime as dt
 import importlib.util
+import io
 import json
 import pathlib
 import struct
@@ -367,6 +369,9 @@ class CaptureAnalysisTest(unittest.TestCase):
     def setUp(self):
         self.layers = diagnostics.keymap_layers(self.KEYMAP)
 
+    def analyse(self, capture, reveal=False):
+        return diagnostics.analyse_capture(capture, self.layers, reveal=reveal)
+
     def test_reads_every_keymap_layer_with_a_uniform_cell_count(self):
         self.assertEqual(
             [layer["name"] for layer in self.layers],
@@ -390,29 +395,33 @@ class CaptureAnalysisTest(unittest.TestCase):
     def test_a_clean_press_produces_one_report_for_each_edge(self):
         capture = [{"kind": "info", "captured_at": "2026-08-13T23:00:00+00:00", "uptime_ms": 5000}]
         capture += press_sequence(1000, 63, 3, 1)
-        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(summary["presses"], 1)
-        self.assertEqual(anomalies, [])
-        self.assertEqual(presses[0]["binding"], "&kp A")
-        self.assertEqual(presses[0]["press_reports"], 1)
-        self.assertEqual(presses[0]["release_reports"], 1)
-        self.assertEqual(presses[0]["held_ms"], 100)
+        analysis = self.analyse(capture)
+        press = analysis["presses"][0]
+        self.assertEqual(analysis["summary"]["presses"], 1)
+        self.assertEqual(analysis["observations"], [])
+        self.assertEqual(press["binding_class"], "key")
+        self.assertEqual(press["press_reports"], 1)
+        self.assertEqual(press["release_reports"], 1)
+        self.assertEqual(press["held_ms"], 100)
 
     def test_reports_bounce_the_debouncer_absorbed(self):
         capture = press_sequence(1000, 63, 3, 1)
         capture[4:4] = [matrix_event(1002, 3, 1, False), matrix_event(1003, 3, 1, True)]
-        _, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(presses[0]["matrix_edges_while_down"], 3)
+        analysis = self.analyse(capture)
+        self.assertEqual(analysis["presses"][0]["matrix_edges_while_down"], 3)
         self.assertEqual(
-            [(item["anomaly"], item["binding"], item["raw_presses"]) for item in anomalies],
-            [("contact_bounce_absorbed", "&kp A", 2)],
+            [
+                (item["observation"], item["layer"], item["binding_class"], item["raw_presses"])
+                for item in analysis["observations"]
+            ],
+            [("contact_bounce_absorbed", "matrix", "key", 2)],
         )
 
     def test_a_second_tap_of_one_key_is_not_a_fault(self):
         capture = press_sequence(1000, 63, 3, 1) + press_sequence(1200, 63, 3, 1)
-        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(summary["presses"], 2)
-        self.assertEqual(anomalies, [])
+        analysis = self.analyse(capture)
+        self.assertEqual(analysis["summary"]["presses"], 2)
+        self.assertEqual(analysis["observations"], [])
 
     def test_reports_a_repeat_the_switch_never_opened_for(self):
         capture = press_sequence(1000, 63, 3, 1)
@@ -423,19 +432,23 @@ class CaptureAnalysisTest(unittest.TestCase):
             keymap_event(1050, 63, True),
             hid_report(1050),
         ]
-        _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        analysis = self.analyse(capture)
         self.assertEqual(
-            [(item["anomaly"], item["binding"]) for item in anomalies],
-            [("repeat_without_raw_release", "&kp A")],
+            [
+                (item["observation"], item["layer"], item["binding_class"])
+                for item in analysis["observations"]
+            ],
+            [("repeat_without_raw_release", "debounce", "key")],
         )
 
     def test_reports_a_key_still_held_when_the_trace_was_frozen(self):
         capture = [keymap_event(1000, 95, True), hid_report(9000)]
-        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(presses, [])
-        self.assertEqual(anomalies, [])
-        self.assertEqual(summary["at_freeze"]["keys"][0]["binding"], "&kp LCTRL")
-        self.assertEqual(summary["at_freeze"]["keys"][0]["held_ms"], 8000)
+        analysis = self.analyse(capture)
+        held = analysis["summary"]["at_freeze"]["keys"][0]
+        self.assertEqual(analysis["presses"], [])
+        self.assertEqual(analysis["observations"], [])
+        self.assertEqual(held["binding"], "&kp LCTRL")
+        self.assertEqual(held["held_ms"], 8000)
 
     def test_reports_a_second_press_that_arrived_without_a_release(self):
         capture = [
@@ -446,8 +459,11 @@ class CaptureAnalysisTest(unittest.TestCase):
             keymap_event(1200, 63, False),
             hid_report(1200),
         ]
-        _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual([item["anomaly"] for item in anomalies], ["press_without_release"])
+        analysis = self.analyse(capture)
+        self.assertEqual(
+            [(item["observation"], item["layer"]) for item in analysis["observations"]],
+            [("press_without_release", "keymap")],
+        )
 
     def test_a_release_before_any_press_is_ring_truncation(self):
         capture = [
@@ -455,17 +471,23 @@ class CaptureAnalysisTest(unittest.TestCase):
             keymap_event(1000, 63, False),
             hid_report(1000),
         ]
-        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(anomalies, [])
-        self.assertEqual([item["binding"] for item in summary["truncated_releases"]], ["&kp A"])
+        analysis = self.analyse(capture)
+        self.assertEqual(analysis["observations"], [])
+        self.assertEqual(
+            [item["binding_class"] for item in analysis["summary"]["truncated_releases"]],
+            ["key"],
+        )
 
     def test_reports_a_release_that_never_had_a_press(self):
         capture = press_sequence(1000, 63, 3, 1) + [keymap_event(2000, 63, False), hid_report(2000)]
-        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(summary["truncated_releases"], [])
+        analysis = self.analyse(capture)
+        self.assertEqual(analysis["summary"]["truncated_releases"], [])
         self.assertEqual(
-            [(item["anomaly"], item["binding"]) for item in anomalies],
-            [("release_without_press", "&kp A")],
+            [
+                (item["observation"], item["layer"], item["binding_class"])
+                for item in analysis["observations"]
+            ],
+            [("release_without_press", "keymap", "key")],
         )
 
     def test_reports_a_transport_stage_that_failed_or_discarded(self):
@@ -486,10 +508,16 @@ class CaptureAnalysisTest(unittest.TestCase):
                 "result": -5,
             },
         ]
-        _, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        analysis = self.analyse(capture)
         self.assertEqual(
-            [(item["anomaly"], item["stage"]) for item in anomalies],
-            [("transport_error", "ppt_queue"), ("transport_error", "hid_send")],
+            [
+                (item["observation"], item["layer"], item["stage"])
+                for item in analysis["observations"]
+            ],
+            [
+                ("transport_error", "keyboard_transport", "ppt_queue"),
+                ("transport_error", "keyboard_transport", "hid_send"),
+            ],
         )
 
     def test_reports_the_modifiers_a_capture_shows_the_keyboard_sending(self):
@@ -498,7 +526,8 @@ class CaptureAnalysisTest(unittest.TestCase):
             hid_report(1400, modifiers=0x2B),
             hid_report(9000, modifiers=0x00),
         ]
-        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
+        analysis = self.analyse(capture)
+        summary = analysis["summary"]
         self.assertEqual(summary["peak_modifiers"]["modifiers"], 0x2B)
         self.assertEqual(
             summary["peak_modifiers"]["names"], ["lctrl", "lshift", "lgui", "rshift"]
@@ -506,14 +535,15 @@ class CaptureAnalysisTest(unittest.TestCase):
         self.assertEqual(summary["longest_modifier_hold"]["modifier"], "lctrl")
         self.assertEqual(summary["longest_modifier_hold"]["held_ms"], 8000)
         self.assertEqual(summary["at_freeze"]["modifiers"], [])
-        self.assertEqual(anomalies, [])
+        self.assertEqual(analysis["observations"], [])
 
     def test_reports_a_modifier_the_keyboard_never_released(self):
         capture = [hid_report(1000, modifiers=0x04), hid_report(31000, modifiers=0x04)]
-        summary, _, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(anomalies, [])
-        self.assertEqual(summary["at_freeze"]["modifiers"][0]["modifier"], "lalt")
-        self.assertEqual(summary["at_freeze"]["modifiers"][0]["held_ms"], 30000)
+        analysis = self.analyse(capture)
+        latched = analysis["summary"]["at_freeze"]["modifiers"][0]
+        self.assertEqual(analysis["observations"], [])
+        self.assertEqual(latched["modifier"], "lalt")
+        self.assertEqual(latched["held_ms"], 30000)
 
     def test_treats_the_direct_gpio_row_as_device_state(self):
         capture = [
@@ -528,10 +558,10 @@ class CaptureAnalysisTest(unittest.TestCase):
             },
             keymap_event(100, 112, True),
         ]
-        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(presses, [])
-        self.assertEqual(anomalies, [])
-        self.assertEqual(summary["device_state"], ["&kc SEL_USB"])
+        analysis = self.analyse(capture)
+        self.assertEqual(analysis["presses"], [])
+        self.assertEqual(analysis["observations"], [])
+        self.assertEqual(analysis["summary"]["device_state"], ["&kc SEL_USB"])
 
     def test_records_a_device_state_input_that_changed_mid_capture(self):
         capture = [
@@ -547,11 +577,168 @@ class CaptureAnalysisTest(unittest.TestCase):
             keymap_event(100, 109, True),
             keymap_event(900, 109, False),
         ]
-        summary, presses, anomalies = diagnostics.analyse_capture(capture, self.layers)
-        self.assertEqual(presses, [])
-        self.assertEqual(anomalies, [])
+        analysis = self.analyse(capture)
+        summary = analysis["summary"]
+        self.assertEqual(analysis["presses"], [])
+        self.assertEqual(analysis["observations"], [])
         self.assertEqual(summary["device_state"], [])
         self.assertEqual([item["binding"] for item in summary["device_state_changes"]], ["&none"])
+
+    def test_names_every_modifier_and_control_this_keymap_binds(self):
+        classify = diagnostics.classify_binding
+        modifiers = {
+            position
+            for layer in self.layers
+            for position, cell in enumerate(layer["bindings"])
+            if classify(cell) == "modifier"
+        }
+        self.assertEqual(modifiers, {79, 90, 95, 96, 97, 99, 100, 102})
+        self.assertEqual(classify(diagnostics.binding_at(self.layers, 4, 23)), "control")
+        self.assertEqual(classify(diagnostics.binding_at(self.layers, 0, 101)), "layer")
+        self.assertEqual(classify(diagnostics.binding_at(self.layers, 4, 80)), "layer")
+        self.assertEqual(classify("&kc SEL_USB", row=diagnostics.STATE_ROW), "device_state")
+        self.assertEqual(classify("&uc LALT"), "modifier")
+        self.assertEqual(classify("&uc LG(C)"), "key")
+
+    def test_a_shift_press_is_named_like_any_other_modifier(self):
+        capture = press_sequence(1000, 79, 5, 6, layer=0)
+        press = self.analyse(capture)["presses"][0]
+        self.assertEqual(press["binding_class"], "modifier")
+        self.assertEqual(press["binding"], "&kp LSHFT")
+
+    def test_a_withheld_key_still_reports_its_matrix_coordinate(self):
+        capture = press_sequence(1000, 63, 3, 1)
+        press = self.analyse(capture)["presses"][0]
+        self.assertEqual((press["row"], press["column"]), (3, 1))
+        self.assertNotIn("binding", press)
+
+    def test_withholds_an_ordinary_key_identity_by_default(self):
+        capture = press_sequence(1000, 63, 3, 1) + press_sequence(1400, 95, 5, 0)
+        analysis = self.analyse(capture)
+        ordinary, modifier = analysis["presses"]
+        self.assertEqual(ordinary["binding_class"], "key")
+        self.assertNotIn("binding", ordinary)
+        self.assertEqual(ordinary["position"], 63)
+        self.assertEqual(modifier["binding_class"], "modifier")
+        self.assertEqual(modifier["binding"], "&kp LCTRL")
+        self.assertEqual(analysis["summary"]["key_identity"], "classified")
+
+    def test_reveal_keys_renders_the_identity_it_withholds(self):
+        capture = press_sequence(1000, 63, 3, 1) + press_sequence(1400, 65, 3, 3)
+        analysis = self.analyse(capture, reveal=True)
+        self.assertEqual(
+            [(item["binding_class"], item["binding"]) for item in analysis["presses"]],
+            [("key", "&kp A"), ("morph_key", "&dq_d")],
+        )
+        self.assertEqual(analysis["summary"]["key_identity"], "revealed")
+
+    def test_a_morph_is_named_as_one_without_naming_its_letter(self):
+        capture = press_sequence(1000, 65, 3, 3)
+        press = self.analyse(capture)["presses"][0]
+        self.assertEqual(press["binding_class"], "morph_key")
+        self.assertNotIn("binding", press)
+
+    def test_measures_the_cadence_that_separates_a_chord_from_a_burst(self):
+        chord = [
+            hid_report(1000, modifiers=0x01),
+            hid_report(1322, modifiers=0x03),
+            hid_report(2000, modifiers=0x00),
+        ]
+        burst = [
+            hid_report(1000, modifiers=0x01),
+            hid_report(1006, modifiers=0x03),
+            hid_report(1012, modifiers=0x0B),
+            hid_report(1018, modifiers=0x1B),
+            hid_report(2000, modifiers=0x00),
+        ]
+        chord_activity = self.analyse(chord)["summary"]["modifier_activity"]
+        burst_activity = self.analyse(burst)["summary"]["modifier_activity"]
+
+        self.assertEqual(chord_activity["shortest_gap_ms"], 322)
+        self.assertEqual(chord_activity["tightest_burst"]["count"], 2)
+        self.assertEqual(chord_activity["tightest_burst"]["span_ms"], 322)
+
+        self.assertEqual(burst_activity["shortest_gap_ms"], 6)
+        self.assertEqual(burst_activity["tightest_burst"]["count"], 4)
+        self.assertEqual(burst_activity["tightest_burst"]["span_ms"], 18)
+        self.assertEqual(
+            burst_activity["tightest_burst"]["modifiers"],
+            ["lctrl", "lshift", "lgui", "rctrl"],
+        )
+
+    def test_a_repeated_modifier_starts_a_new_burst(self):
+        capture = [
+            hid_report(1000, modifiers=0x01),
+            hid_report(1004, modifiers=0x03),
+            hid_report(1008, modifiers=0x02),
+            hid_report(5000, modifiers=0x03),
+            hid_report(5002, modifiers=0x00),
+        ]
+        activity = self.analyse(capture)["summary"]["modifier_activity"]
+        self.assertEqual(activity["assertions"], 3)
+        self.assertEqual(activity["distinct_modifiers"], 2)
+        self.assertEqual(activity["tightest_burst"]["count"], 2)
+        self.assertEqual(activity["tightest_burst"]["span_ms"], 4)
+
+    def test_every_assertion_carries_its_interval(self):
+        capture = [
+            hid_report(1000, modifiers=0x01),
+            hid_report(1006, modifiers=0x03),
+            hid_report(2000, modifiers=0x00),
+        ]
+        assertions = self.analyse(capture)["modifier_assertions"]
+        self.assertEqual(
+            [(item["modifier"], item["since_previous_ms"]) for item in assertions],
+            [("lctrl", None), ("lshift", 6)],
+        )
+        self.assertEqual({item["kind"] for item in assertions}, {"modifier_assertion"})
+
+    def test_a_summary_names_the_layers_it_cannot_speak_for(self):
+        capture = press_sequence(1000, 63, 3, 1)
+        summary = self.analyse(capture)["summary"]
+        boundary = summary["evidence_boundary"]
+        self.assertEqual(summary["keyboard_observations"], {})
+        self.assertEqual(boundary["layer"], "keyboard")
+        self.assertIn("receiver USB", boundary["excludes"])
+        self.assertIn("the Windows input stack", boundary["excludes"])
+
+    def test_every_observation_names_the_layer_it_was_seen_at(self):
+        self.assertEqual(
+            {name: entry["layer"] for name, entry in diagnostics.OBSERVATIONS.items()},
+            {
+                "contact_bounce_absorbed": "matrix",
+                "repeat_without_raw_release": "debounce",
+                "press_without_release": "keymap",
+                "release_without_press": "keymap",
+                "modifier_error": "hid_state",
+                "kscan_drop": "scan_queue",
+                "transport_error": "keyboard_transport",
+            },
+        )
+        self.assertIn(
+            "does not show that the radio",
+            diagnostics.OBSERVATIONS["transport_error"]["means"],
+        )
+
+    def test_analyse_output_discloses_no_ordinary_key(self):
+        capture = press_sequence(1000, 63, 3, 1) + press_sequence(1400, 95, 5, 0)
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "capture.jsonl"
+            path.write_text(
+                "\n".join(json.dumps(item) for item in capture) + "\n", encoding="utf-8"
+            )
+            args = argparse.Namespace(
+                capture=str(path), keymap=str(self.KEYMAP), presses=True, reveal_keys=False
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                diagnostics.run_analyse(args)
+            emitted = output.getvalue()
+
+        self.assertNotIn("&kp A", emitted)
+        self.assertIn("&kp LCTRL", emitted)
+        self.assertIn('"binding_class": "key"', emitted)
+        self.assertIn('"key_identity": "classified"', emitted)
 
     def test_a_dump_dates_every_record_against_the_host_clock(self):
         fake = FakeDumpDevice(uptime_ms=60000, record_uptime_ms=20000)
@@ -699,7 +886,7 @@ class RecordCodecTest(unittest.TestCase):
         self.assertEqual(objects[0]["raw_slots"], 0)
 
     def test_a_partial_summary_says_it_counted_nothing(self):
-        summary, _, _ = diagnostics.analyse_capture(
+        analysis = diagnostics.analyse_capture(
             [
                 {
                     "kind": "info",
@@ -710,6 +897,7 @@ class RecordCodecTest(unittest.TestCase):
             ],
             {},
         )
+        summary = analysis["summary"]
         self.assertEqual(summary["capture_status"], "partial")
         self.assertEqual(summary["records"], 0)
 
@@ -884,11 +1072,22 @@ class RecordCodecTest(unittest.TestCase):
                     path.name,
                 )
 
-    def test_schema_covers_every_event_and_anomaly_the_tool_emits(self):
+    def test_schema_covers_every_event_and_observation_the_tool_emits(self):
         schema = diagnostics.capture_schema()
         self.assertEqual(
             set(schema["events"]), set(diagnostics.EVENT_NAMES.values())
         )
+        self.assertEqual(
+            set(schema["observations"]), set(diagnostics.OBSERVATIONS)
+        )
+        self.assertEqual(
+            set(schema["privacy"]["binding_class"]), set(diagnostics.BINDING_CLASSES)
+        )
+        self.assertEqual(
+            schema["privacy"]["rendered_without_asking"], list(diagnostics.REVEALED_CLASSES)
+        )
+        self.assertNotIn("key", schema["privacy"]["rendered_without_asking"])
+        self.assertEqual(schema["evidence_boundary"], diagnostics.EVIDENCE_BOUNDARY)
         self.assertEqual(schema["matrix"]["state_row"], diagnostics.STATE_ROW)
         self.assertEqual(
             schema["protocol"][2]["record_size"], diagnostics.RECORD_SIZE_V2

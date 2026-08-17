@@ -13,7 +13,11 @@ The ring holds about 1024 records, roughly 60 keystrokes. The firmware also
 freezes it without being asked, on a report carrying five or more modifiers or
 on a modifier held past the configured threshold. Nothing is recorded once it
 is frozen, so capture and re-arm before expecting it to catch anything else.
-The saved metadata reports the analysis, and the commands that reproduce it.
+
+This command records evidence. It reports the capture's status, the firmware's
+ring accounting and where the files were saved. It draws no conclusion about
+the incident: the saved metadata carries the commands that read the capture,
+which are run separately once the evidence is being interpreted.
 
 ULTRA_DIR is detected from this script, the current directory, or
 ~/dwerty/ultra for the invoking user. Captures go to /mnt/shared when
@@ -399,6 +403,8 @@ set -e
   echo "hardware_id=${SELECTED_HARDWARE_ID}"
   echo "device=${device_json}"
   echo "header=$(head -n 1 "${capture}")"
+  echo "evidence_layer=keyboard"
+  echo "evidence_excludes=radio,receiver,receiver_usb,windows"
   echo "schema_command=${DIAGNOSTICS} schema"
   echo "analyse_command=${DIAGNOSTICS} analyse ${capture}"
   echo "validation_command=${DIAGNOSTICS} validate ${capture}"
@@ -430,18 +436,12 @@ echo
 echo "Header:"
 head -n 1 "${capture}"
 echo
-
-analysis="$("${DIAGNOSTICS}" analyse "${capture}" 2>/dev/null || true)"
-if [[ -n "${analysis}" ]]; then
-  {
-    echo "analysis_begin"
-    printf '%s\n' "${analysis}"
-    echo "analysis_end"
-  } >>"${metadata}"
-  echo "Analysis:"
-  printf '%s\n' "${analysis}"
-  echo
-fi
+# This command records evidence. Whether the capture represents an incident is
+# decided later, from its timing, the operator's account and the layers below.
+echo "Scope: keyboard-side records only, across the window the ring retained."
+echo "It does not cover radio delivery, the receiver, receiver USB or Windows."
+echo "Read it with: ${DIAGNOSTICS} analyse ${capture}"
+echo
 
 if [[ "${KEEP_FROZEN}" == "1" ]]; then
   echo "ring_rearmed=false" >>"${metadata}"

@@ -73,6 +73,92 @@ LAYER_PATTERN = re.compile(r"(\w+)\s*\{[^{}]*?(?<![-\w])bindings\s*=\s*<(.*?)>\s
 # state indefinitely by design, so they are device state rather than keystrokes.
 STATE_ROW = 6
 
+# Every observation names the pipeline layer it was seen at, because the trace
+# ends at the keyboard and a reader has to know which layers it says nothing
+# about before drawing a conclusion from one.
+OBSERVATIONS = {
+    "contact_bounce_absorbed": {
+        "layer": "matrix",
+        "means": "A switch bounced and the debouncer filtered it. Switch wear, "
+                 "not an output error.",
+    },
+    "repeat_without_raw_release": {
+        "layer": "debounce",
+        "means": "A debounced repeat arrived while the raw matrix still read closed, "
+                 "which no second physical press can produce.",
+    },
+    "press_without_release": {
+        "layer": "keymap",
+        "means": "A position was routed as pressed twice with no release between.",
+    },
+    "release_without_press": {
+        "layer": "keymap",
+        "means": "A release was routed for a position not held, and the window "
+                 "retained the span the press would have occupied.",
+    },
+    "modifier_error": {
+        "layer": "hid_state",
+        "means": "The firmware's modifier reference count underflowed.",
+    },
+    "kscan_drop": {
+        "layer": "scan_queue",
+        "means": "The scan queue discarded a transition.",
+    },
+    "transport_error": {
+        "layer": "keyboard_transport",
+        "means": "A queue, transmit or send stage errored or discarded on the "
+                 "keyboard side of the link. Its absence says the keyboard handed "
+                 "the report over; it does not show that the radio, receiver, "
+                 "receiver USB or Windows delivered it.",
+    },
+}
+
+EVIDENCE_BOUNDARY = {
+    "layer": "keyboard",
+    "covers": "MCU matrix sampling through the keyboard's hand-off of a HID report "
+              "to a transport.",
+    "excludes": [
+        "radio delivery",
+        "receiver firmware",
+        "receiver USB",
+        "the Windows input stack",
+        "the application receiving input",
+        "records overwritten before the window opened",
+        "anything after the ring froze",
+    ],
+    "reading": "The observation set is scoped to the layers above, across the retained "
+               "window only. An empty set means nothing inconsistent was recorded there, "
+               "which is consistent with a fault at any excluded layer and with a fault "
+               "outside the window.",
+}
+
+# Which cell identity may be rendered without asking. A modifier, a layer switch
+# and a keyboard-local control carry no typed content and are the investigation's
+# subject; an ordinary key's identity is typed content.
+BINDING_CLASSES = {
+    "modifier": "A modifier, held or sticky. Rendered because it is the subject.",
+    "layer": "A layer switch. Rendered because routing depends on it.",
+    "control": "A keyboard-local control such as lighting, transport selection or "
+               "pairing, which emits no keystroke.",
+    "device_state": "A direct GPIO input such as the Mac/Win slide or a transport "
+                    "selector. Rendered because it is device state, not input.",
+    "morph_key": "A Dwerty mod-morph, whose identity is a typed character.",
+    "key": "An ordinary key, whose identity is a typed character.",
+    "unassigned": "The position holds no binding on the reported layer.",
+}
+REVEALED_CLASSES = ("modifier", "layer", "control", "device_state", "unassigned")
+MODIFIER_BEHAVIOURS = ("&kp", "&sk", "&uc")
+LAYER_BEHAVIOURS = ("&mo", "&to", "&tog", "&lt", "&sl", "&df")
+CONTROL_BEHAVIOURS = ("&kc", "&kc_lp", "&rgb_ug", "&bl", "&bt", "&out", "&ext_power")
+CONTROL_PREFIXES = ("&bt_pair", "&bt_recon", "&ppt_pair", "&rgb_")
+MODIFIER_KEYCODES = {
+    "LCTRL", "LCTL", "LEFT_CONTROL", "RCTRL", "RCTL", "RIGHT_CONTROL",
+    "LSHIFT", "LSHFT", "LEFT_SHIFT", "RSHIFT", "RSHFT", "RIGHT_SHIFT",
+    "LALT", "LEFT_ALT", "RALT", "RIGHT_ALT",
+    "LGUI", "LWIN", "LCMD", "LMETA", "LEFT_GUI", "LEFT_WIN", "LEFT_COMMAND", "LEFT_META",
+    "RGUI", "RWIN", "RCMD", "RMETA", "RIGHT_GUI", "RIGHT_WIN", "RIGHT_COMMAND", "RIGHT_META",
+}
+
 
 def crc16(data):
     crc = 0xFFFF
@@ -231,8 +317,12 @@ def capture_schema():
         "read_me_first": [
             "A capture is a window cut from a ring, not a recording of an incident. "
             "Check overwritten and freeze_reason before reading anything into it.",
-            "anomalies lists what the keyboard did wrong. at_freeze, truncated_releases "
-            "and device_state are where the window starts and stops, not faults.",
+            "This tool records evidence and measures it. It does not decide whether an "
+            "incident occurred. That needs the raw timing here, the operator's account "
+            "and evidence from the layers named in evidence_boundary.",
+            "keyboard_observations lists what the keyboard's own records are inconsistent "
+            "about, at the layer each observation names. at_freeze, truncated_releases and "
+            "device_state are where the window starts and stops, not faults.",
         ],
         "protocol": {
             1: {
@@ -320,34 +410,73 @@ def capture_schema():
             "hid_reports": "HID reports the firmware formed.",
             "overwritten": "Records already lost to ring wrap. Non-zero means the capture is "
                            "a window, so absence of an event proves nothing.",
-            "peak_modifiers": "The most modifiers the keyboard placed in one report.",
+            "peak_modifiers": "The most modifiers the keyboard placed in one report. A count "
+                              "alone does not separate a chord from a fault; read it with "
+                              "modifier_activity.",
             "longest_modifier_hold": "The longest any single modifier stayed set.",
+            "modifier_activity": "How tightly modifiers arrived. See the modifier_activity "
+                                 "section.",
             "at_freeze": "Keys and modifiers still held when recording stopped. Boundary "
                          "state, not a fault: judge it by held_ms. A ring frozen on five "
                          "modifiers necessarily reports five modifiers held.",
             "truncated_releases": "Releases whose press was overwritten before the window.",
             "device_state": "Direct GPIO inputs held at the freeze.",
-            "anomalies": "Counts of things the keyboard did wrong. Empty means it behaved "
-                         "correctly across the retained window.",
+            "keyboard_observations": "Counts of what the keyboard's own records are "
+                                     "inconsistent about, each scoped to the layer it names. "
+                                     "An empty set is scoped the same way: see "
+                                     "evidence_boundary before reading it as an all-clear.",
+            "evidence_boundary": "The layers this capture covers and the layers it says "
+                                 "nothing about.",
+            "key_identity": "classified when ordinary key identity was withheld, revealed "
+                            "when --reveal-keys rendered it.",
         },
-        "anomalies": {
-            "contact_bounce_absorbed": "A switch bounced and the debouncer filtered it. "
-                                       "Wear, not an output error.",
-            "repeat_without_raw_release": "A debounced repeat arrived while the raw matrix "
-                                          "still read closed, which no real press can produce.",
-            "press_without_release": "A position was pressed twice with no release between.",
-            "release_without_press": "A release was routed for a position not held, and the "
-                                     "press was inside the capture rather than overwritten.",
-            "modifier_error": "The firmware's modifier refcount underflowed.",
-            "kscan_drop": "The scan queue discarded an event.",
-            "transport_error": "A queue, transmit or send stage errored or discarded.",
+        "modifier_activity": {
+            "purpose": "Cadence is what separates a chord a person typed from modifiers "
+                       "that arrived together. Peak count and hold duration read alike for "
+                       "both, so the intervals are measured rather than inferred.",
+            "assertions": "Modifier bits that went from clear to set across hid_report "
+                          "records in the window.",
+            "distinct_modifiers": "How many different modifiers were asserted.",
+            "shortest_gap_ms": "The shortest interval between consecutive assertions of two "
+                               "different modifiers.",
+            "tightest_burst": "The widest run of distinct modifiers that arrived without one "
+                              "repeating, taking the shortest such run when several tie. "
+                              "Carries count, span_ms, modifiers and at.",
+            "interpretation": "None is applied. A span of a few hundred milliseconds and a "
+                              "span of tens of milliseconds are both reported as measured.",
         },
+        "observations": {
+            name: {"layer": entry["layer"], "means": entry["means"]}
+            for name, entry in OBSERVATIONS.items()
+        },
+        "privacy": {
+            "boundary": "An ordinary key's identity is typed content and is not the "
+                        "investigation's subject, so it is withheld by default. A capture's "
+                        "positions reconstruct typed input once they are read against a "
+                        "published keymap, so treat a capture as sensitive whether or not "
+                        "identity was rendered.",
+            "always_reported": [
+                "position",
+                "matrix row and column, wherever the capture resolved one",
+                "press and release state",
+                "held_ms and every other timing field",
+                "reports formed per edge",
+                "pipeline progression across events",
+            ],
+            "binding_class": BINDING_CLASSES,
+            "rendered_without_asking": list(REVEALED_CLASSES),
+            "reveal": "analyse --reveal-keys renders key and morph_key identity too.",
+        },
+        "evidence_boundary": EVIDENCE_BOUNDARY,
         "limits": [
             "The trace shows what the MCU read and what the firmware sent. It cannot "
             "distinguish a switch a person pressed from an intersection read as closed "
             "for electrical reasons.",
             "It ends at the keyboard. A receiver USB capture is needed for the radio and "
-            "host stages.",
+            "host stages, and a keyboard-side send reported as successful does not show "
+            "that the radio, receiver or Windows delivered it.",
+            "It cannot say whether an incident occurred. It says what the keyboard "
+            "recorded across the window it retained.",
         ],
     }
 
@@ -488,6 +617,43 @@ def binding_at(layers, layer, position):
     return None
 
 
+def classify_binding(binding, row=None):
+    """Sort a binding cell into the classes the privacy boundary is drawn around."""
+    if row == STATE_ROW:
+        return "device_state"
+    if not binding or binding in ("&none", "&trans"):
+        return "unassigned"
+    behaviour, _, argument = binding.partition(" ")
+    arguments = argument.split()
+    if behaviour in LAYER_BEHAVIOURS:
+        return "layer"
+    if behaviour in CONTROL_BEHAVIOURS or behaviour.startswith(CONTROL_PREFIXES):
+        return "control"
+    if behaviour in MODIFIER_BEHAVIOURS and arguments[:1] and arguments[0] in MODIFIER_KEYCODES:
+        return "modifier"
+    if behaviour.startswith("&dq_"):
+        return "morph_key"
+    return "key"
+
+
+def describe_position(layers, layer, position, reveal=False, coordinate=None):
+    """Name a position for a reader without disclosing typed content by default.
+
+    Position, matrix coordinate and timing carry the diagnosis. An ordinary key's
+    identity does not, and a capture's positions reconstruct typed input once they
+    are read against a published keymap.
+    """
+    row, column = coordinate if coordinate else (None, None)
+    binding = binding_at(layers, layer, position)
+    binding_class = classify_binding(binding, row)
+    described = {"position": position, "binding_class": binding_class}
+    if row is not None:
+        described.update(row=row, column=column)
+    if binding_class in REVEALED_CLASSES or reveal:
+        described["binding"] = binding
+    return described
+
+
 def capture_boot(info):
     """Recover the device boot instant so records share a timebase with host logs."""
     if info.get("boot_at"):
@@ -498,8 +664,55 @@ def capture_boot(info):
     return None
 
 
-def analyse_capture(objects, layers):
-    """Report per-press evidence and the structural faults a capture can prove."""
+def summarise_assertions(assertions):
+    """Measure how tightly modifiers arrived, which cadence alone distinguishes.
+
+    Peak count and hold duration read the same for a chord typed over a third of a
+    second and for several modifiers appearing inside twenty milliseconds. The
+    interval between assertions is what separates them, so it is reported as a
+    measurement rather than left to be inferred.
+    """
+    activity = {
+        "assertions": len(assertions),
+        "distinct_modifiers": len({item["modifier"] for item in assertions}),
+        "shortest_gap_ms": None,
+        "tightest_burst": None,
+    }
+    gaps = [
+        item["since_previous_ms"]
+        for previous, item in zip(assertions, assertions[1:])
+        if item["modifier"] != previous["modifier"]
+    ]
+    if gaps:
+        activity["shortest_gap_ms"] = min(gaps)
+
+    # The widest run of distinct modifiers that arrived without one repeating,
+    # taking the shortest such run when several hold the same count.
+    best = None
+    start = 0
+    seen = {}
+    for end, item in enumerate(assertions):
+        modifier = item["modifier"]
+        if modifier in seen and seen[modifier] >= start:
+            start = seen[modifier] + 1
+        seen[modifier] = end
+        candidate = {
+            "count": end - start + 1,
+            "span_ms": item["uptime_ms"] - assertions[start]["uptime_ms"],
+            "modifiers": [entry["modifier"] for entry in assertions[start:end + 1]],
+            "at": assertions[start]["at"],
+        }
+        if best is None or (candidate["count"], -candidate["span_ms"]) > (
+            best["count"],
+            -best["span_ms"],
+        ):
+            best = candidate
+    activity["tightest_burst"] = best
+    return activity
+
+
+def analyse_capture(objects, layers, reveal=False):
+    """Report per-press evidence and what a capture shows at each keyboard layer."""
     info = next((item for item in objects if item.get("kind") == "info"), {})
     records = [item for item in objects if item.get("kind") == "record"]
     boot_at = capture_boot(info)
@@ -509,13 +722,20 @@ def analyse_capture(objects, layers):
             return record["recorded_at"]
         return wall_clock(boot_at, record["uptime_ms"]) if boot_at else None
 
-    def describe(record=None, position=None, layer=None):
+    def describe(record=None, position=None, layer=None, coordinate=None):
         record = record or {}
         if position is None:
             position = record.get("position")
         if layer is None:
             layer = record.get("default_layer")
-        return {"position": position, "binding": binding_at(layers, layer, position)}
+        if coordinate is None:
+            coordinate = coordinates.get(position)
+        return describe_position(layers, layer, position, reveal=reveal, coordinate=coordinate)
+
+    def observe(name, at, **fields):
+        observations.append(
+            {"observation": name, "layer": OBSERVATIONS[name]["layer"], "at": at, **fields}
+        )
 
     raw_edges = collections.Counter()
     scan_edges = collections.Counter()
@@ -524,6 +744,7 @@ def analyse_capture(objects, layers):
     scanned = set()
     released = set()
     repeats = []
+    observations = []
     for record in records:
         key = (record.get("row"), record.get("column"))
         if record["event"] == "position":
@@ -552,7 +773,6 @@ def analyse_capture(objects, layers):
         return count
 
     presses = []
-    anomalies = []
     state_changes = []
     truncated = []
     pressed_positions = set()
@@ -564,54 +784,37 @@ def analyse_capture(objects, layers):
         if event == "hid_report":
             reports += 1
         elif event == "modifier":
-            modifier_depth = record["count"]
             if record["error"]:
-                anomalies.append(
-                    {
-                        "anomaly": "modifier_error",
-                        "at": moment(record),
-                        "modifier": record["modifier"],
-                        "count": record["count"],
-                        "report_modifiers": record["report_modifiers"],
-                    }
+                observe(
+                    "modifier_error",
+                    moment(record),
+                    modifier=record["modifier"],
+                    count=record["count"],
+                    report_modifiers=record["report_modifiers"],
                 )
         elif event == "kscan_drop":
-            anomalies.append({"anomaly": "kscan_drop", "at": moment(record), **describe(record)})
+            observe("kscan_drop", moment(record), **describe(record))
         elif event in ("ppt_queue", "ppt_tx", "hid_send"):
             if record.get("error") or record.get("discarded") or record.get("result", 0) < 0:
-                anomalies.append(
-                    {
-                        "anomaly": "transport_error",
-                        "at": moment(record),
-                        "stage": event,
-                        "transport": record.get("transport"),
-                        "result": record.get("result"),
-                        "discarded": record.get("discarded"),
-                    }
+                observe(
+                    "transport_error",
+                    moment(record),
+                    stage=event,
+                    transport=record.get("transport"),
+                    result=record.get("result"),
+                    discarded=record.get("discarded"),
                 )
         elif event == "keymap":
             default_layer = record["default_layer"]
             position = record["position"]
             if record["pressed"]:
                 if position in held:
-                    anomalies.append(
-                        {
-                            "anomaly": "press_without_release",
-                            "at": moment(record),
-                            **describe(record),
-                        }
-                    )
+                    observe("press_without_release", moment(record), **describe(record))
                 held[position] = (index, record)
                 pressed_positions.add(position)
             elif position not in held:
                 if position in pressed_positions or not info.get("overwritten"):
-                    anomalies.append(
-                        {
-                            "anomaly": "release_without_press",
-                            "at": moment(record),
-                            **describe(record),
-                        }
-                    )
+                    observe("release_without_press", moment(record), **describe(record))
                 else:
                     truncated.append({"at": moment(record), **describe(record)})
             else:
@@ -646,32 +849,26 @@ def analyse_capture(objects, layers):
                 )
 
     for key, record in repeats:
-        anomalies.append(
-            {
-                "anomaly": "repeat_without_raw_release",
-                "at": moment(record),
-                "row": key[0],
-                "column": key[1],
-                **describe(position=positions.get(key), layer=default_layer),
-            }
+        observe(
+            "repeat_without_raw_release",
+            moment(record),
+            **describe(position=positions.get(key), layer=default_layer, coordinate=key),
         )
 
     for key, count in sorted(raw_edges.items()):
         if count > scan_edges[key]:
-            anomalies.append(
-                {
-                    "anomaly": "contact_bounce_absorbed",
-                    "row": key[0],
-                    "column": key[1],
-                    "raw_presses": count,
-                    "debounced_presses": scan_edges[key],
-                    **describe(position=positions.get(key), layer=default_layer),
-                }
+            observe(
+                "contact_bounce_absorbed",
+                None,
+                raw_presses=count,
+                debounced_presses=scan_edges[key],
+                **describe(position=positions.get(key), layer=default_layer, coordinate=key),
             )
 
     modifier_state = 0
     modifier_since = {}
     longest_hold = None
+    assertions = []
     peak = {"modifiers": 0, "names": [], "at": None}
     for record in records:
         if record["event"] != "hid_report":
@@ -689,6 +886,21 @@ def analyse_capture(objects, layers):
                 continue
             if current & mask:
                 modifier_since[bit] = record
+                assertions.append(
+                    {
+                        "kind": "modifier_assertion",
+                        "modifier": MODIFIERS[bit],
+                        "at": moment(record),
+                        "uptime_ms": record["uptime_ms"],
+                        "since_previous_ms": (
+                            record["uptime_ms"] - assertions[-1]["uptime_ms"]
+                            if assertions
+                            else None
+                        ),
+                        "report_modifiers": current,
+                        "report_modifier_names": record["modifier_names"],
+                    }
+                )
             else:
                 down = modifier_since.pop(bit, None)
                 if down is None:
@@ -701,6 +913,8 @@ def analyse_capture(objects, layers):
                 if longest_hold is None or hold["held_ms"] > longest_hold["held_ms"]:
                     longest_hold = hold
         modifier_state = current
+
+    modifier_activity = summarise_assertions(assertions)
 
     latched = []
     for bit, down in sorted(modifier_since.items()):
@@ -743,13 +957,23 @@ def analyse_capture(objects, layers):
         "boot_uncertainty_ms": info.get("boot_uncertainty_ms"),
         "peak_modifiers": peak,
         "longest_modifier_hold": longest_hold,
+        "modifier_activity": modifier_activity,
         "at_freeze": {"modifiers": latched, "keys": keys_held},
         "truncated_releases": truncated,
         "device_state": device_state,
         "device_state_changes": state_changes,
-        "anomalies": collections.Counter(item["anomaly"] for item in anomalies),
+        "keyboard_observations": collections.Counter(
+            item["observation"] for item in observations
+        ),
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "key_identity": "revealed" if reveal else "classified",
     }
-    return summary, presses, anomalies
+    return {
+        "summary": summary,
+        "presses": presses,
+        "observations": observations,
+        "modifier_assertions": assertions,
+    }
 
 
 def run_analyse(args):
@@ -760,14 +984,17 @@ def run_analyse(args):
     ]
     keymap = args.keymap or pathlib.Path(__file__).parents[1] / "config" / KEYMAP_NAME
     layers = keymap_layers(keymap)
-    summary, presses, anomalies = analyse_capture(objects, layers)
-    summary["anomalies"] = dict(summary["anomalies"])
+    analysis = analyse_capture(objects, layers, reveal=args.reveal_keys)
+    summary = analysis["summary"]
+    summary["keyboard_observations"] = dict(summary["keyboard_observations"])
     emit(summary, None)
     if args.presses:
-        for press in presses:
+        for press in analysis["presses"]:
             emit(press, None)
-    for anomaly in anomalies:
-        emit({"kind": "anomaly", **anomaly}, None)
+    for assertion in analysis["modifier_assertions"]:
+        emit(assertion, None)
+    for observation in analysis["observations"]:
+        emit({"kind": "observation", **observation}, None)
 
 
 def parse_info(data):
@@ -1326,6 +1553,11 @@ def main():
     analyse_parser.add_argument("capture")
     analyse_parser.add_argument("--keymap")
     analyse_parser.add_argument("--presses", action="store_true")
+    analyse_parser.add_argument(
+        "--reveal-keys",
+        action="store_true",
+        help="render an ordinary key's identity as well as its position",
+    )
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("capture")
     subparsers.add_parser("schema")

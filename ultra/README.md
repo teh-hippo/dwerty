@@ -90,30 +90,39 @@ relationship, absolute sequence coverage and unknown-timestamp accounting.
 ```bash
 ./scripts/capture-incident.sh                       # freeze, save, re-arm, detach
 ./scripts/diagnostics.py validate CAPTURE.jsonl     # protocol-aware completeness check
-./scripts/diagnostics.py analyse CAPTURE.jsonl      # summary and anomalies
+./scripts/diagnostics.py analyse CAPTURE.jsonl      # summary, cadence and observations
 ./scripts/diagnostics.py analyse --presses CAPTURE.jsonl
+./scripts/diagnostics.py analyse --reveal-keys CAPTURE.jsonl
 ./scripts/diagnostics.py schema                     # what a capture's fields mean
 ```
 
-`schema` emits a machine-readable description of the record layouts, every event and its fields, the summary shape, the anomaly meanings and the trace's limits. It is what lets a capture be read without this source, and each capture's `.txt` records the command that produces it.
+Collecting and interpreting are separate steps. `capture-incident.sh` freezes, saves, validates and re-arms, and reports the capture's status, the firmware's ring accounting and where the files went. It draws no conclusion, because a keyboard-side window cannot decide on its own whether an incident occurred: that needs the timing below, the operator's account and evidence from the receiver, USB and Windows. `analyse` is run afterwards, deliberately, against the saved file.
 
-`analyse` names every position from [`config/keychron_v6_ultra_ansi.keymap`](config/keychron_v6_ultra_ansi.keymap) using the layer the firmware recorded, so a trace reads as bindings rather than matrix coordinates. It reports the capture window in wall-clock time, derived from the device uptime and the host clock at the freeze, which is what lets a firmware trace be lined up against a host-side log.
+`schema` emits a machine-readable description of the record layouts, every event and its fields, the summary shape, each observation with the layer it belongs to, the privacy boundary and the trace's limits. It is what lets a capture be read without this source, and each capture's `.txt` records the command that produces it.
+
+`analyse` resolves every position through [`config/keychron_v6_ultra_ansi.keymap`](config/keychron_v6_ultra_ansi.keymap) using the layer the firmware recorded, then reports what that position is rather than what it types. Modifiers, layer switches and device-state inputs are named in full because they are the subject of the investigation and carry no typed content. An ordinary key is reported as its position, its matrix coordinate and a `binding_class` of `key` or `morph_key`; `--reveal-keys` renders its identity too. Timing, press and release state, per-edge report counts and pipeline progression are unaffected, so a repeated physical position and a matrix pattern stay diagnosable without disclosing what was typed. A capture's positions still reconstruct input when read against a published keymap, so treat the files as sensitive either way.
+
+`analyse` reports the capture window in wall-clock time, derived from the device uptime and the host clock at the freeze, which is what lets a firmware trace be lined up against a host-side log.
 
 The ring holds roughly 60 keystrokes, so it must be frozen before anything else is typed. `overwritten` in the summary counts the records already lost.
 
-The summary counts presses and HID reports. A correct press produces exactly one report on its press edge and one on its release, which is what separates a keyboard fault from a host one: if the firmware emitted one report for a key but the host received several characters, the extra characters did not come from the keyboard. These faults are reported by name:
+The summary counts presses and HID reports. A correct press produces exactly one report on its press edge and one on its release, which is what separates a keyboard fault from a host one: if the firmware emitted one report for a key but the host received several characters, the extra characters did not come from the keyboard. Where the keyboard's own records contradict themselves, the summary names the pipeline layer that saw it:
 
-| Anomaly | Meaning |
-| --- | --- |
-| `contact_bounce_absorbed` | The switch bounced and the debouncer filtered it. Hardware wear, no output error. |
-| `repeat_without_raw_release` | A debounced repeat arrived while the raw matrix still read closed, which no real second press can produce. |
-| `press_without_release` | A position was pressed twice with no release routed between. |
-| `release_without_press` | A release was routed for a position that was not held, with no overwritten press explaining it. |
-| `modifier_error` | The firmware's modifier refcount underflowed. |
-| `kscan_drop` | The scan queue discarded an event. |
-| `transport_error` | A PPT queue, PPT transmit or HID send stage reported an error or discard. |
+| Observation | Layer | Meaning |
+| --- | --- | --- |
+| `contact_bounce_absorbed` | `matrix` | The switch bounced and the debouncer filtered it. Hardware wear, no output error. |
+| `repeat_without_raw_release` | `debounce` | A debounced repeat arrived while the raw matrix still read closed, which no real second press can produce. |
+| `press_without_release` | `keymap` | A position was pressed twice with no release routed between. |
+| `release_without_press` | `keymap` | A release was routed for a position that was not held, with no overwritten press explaining it. |
+| `modifier_error` | `hid_state` | The firmware's modifier refcount underflowed. |
+| `kscan_drop` | `scan_queue` | The scan queue discarded an event. |
+| `transport_error` | `keyboard_transport` | A PPT queue, PPT transmit or HID send stage reported an error or discard. |
+
+`evidence_boundary` in the summary states the same limit the other way round. The capture covers matrix sampling through the keyboard handing a report to a transport. It says nothing about radio delivery, the receiver, receiver USB, Windows or the receiving application, and nothing about records overwritten before the window opened. An empty observation set therefore means nothing inconsistent was recorded at those layers across that window; it is consistent with a fault anywhere else.
 
 For a modifier latch the summary carries the decisive fields directly. `peak_modifiers` is the most modifiers the keyboard ever placed in a single report, `longest_modifier_hold` is the longest any one modifier stayed set, and `at_freeze.modifiers` lists those still set when recording stopped. A host showing several modifiers held while the keyboard's own peak is one or none did not get them from the keyboard.
+
+Count and duration alone read the same for a chord and for a fault, so `modifier_activity` measures cadence. `shortest_gap_ms` is the shortest interval between two different modifiers being asserted, and `tightest_burst` is the widest run of distinct modifiers that arrived without one repeating, with its span. Ctrl followed by Shift a third of a second later and four modifiers appearing inside twenty milliseconds are both reported as measured, with no verdict attached. Each assertion is also emitted as a `modifier_assertion` line carrying its interval.
 
 The firmware freezes the ring itself in two cases, and `freeze_reason` says which:
 

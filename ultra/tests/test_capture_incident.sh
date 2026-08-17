@@ -5,6 +5,17 @@ set -euo pipefail
 ULTRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COLLECTOR="${ULTRA_DIR}/scripts/capture-incident.sh"
 
+# `set -e` exempts a command whose status is inverted with `!`, so a negative
+# assertion written that way passes even when the condition it guards is true.
+refute() {
+  local description="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    echo "Expected no ${description}" >&2
+    exit 1
+  fi
+}
+
 make_fixture() {
   local root="$1"
   mkdir -p "${root}/ultra/scripts" "${root}/out"
@@ -24,6 +35,7 @@ while [[ "$#" -gt 0 ]]; do
   esac
   shift
 done
+echo "${command}" >>"${TMP_STATE}/subcommands.log"
 attached=""
 [[ "${pid}" == "0xd028" ]] && attached="${TMP_STATE}/receiver" && short=d028
 [[ "${pid}" == "0x0c60" ]] && attached="${TMP_STATE}/wired" && short=0c60
@@ -135,6 +147,19 @@ run_case() (
   [[ -f "${root}/armed" ]]
   grep -q "detach --busid ${expected_busid}" "${root}/detach.log"
   grep -q "Detached ${expected_id} (${expected_busid})" "${root}/run.out"
+
+  # Collection records evidence. It states the layer it covers and where the
+  # files went, and leaves interpretation to a command the operator runs later.
+  grep -q "^dump$" "${root}/subcommands.log"
+  grep -q "^validate$" "${root}/subcommands.log"
+  refute "analyse subcommand" grep -q "^analyse$" "${root}/subcommands.log"
+  refute "analysis in the sidecar" grep -q "analysis_begin" "${root}"/out/*.txt
+  refute "analysis on stdout" grep -qi "^Analysis:" "${root}/run.out"
+  grep -q "^evidence_layer=keyboard$" "${root}"/out/*.txt
+  grep -q "^evidence_excludes=radio,receiver,receiver_usb,windows$" "${root}"/out/*.txt
+  grep -q "^analyse_command=.* analyse .*\.jsonl$" "${root}"/out/*.txt
+  grep -q "^schema_command=.* schema$" "${root}"/out/*.txt
+  grep -q "does not cover radio delivery" "${root}/run.out"
 )
 
 # A capture that fails after attaching must return the keyboard to Windows.
@@ -156,13 +181,13 @@ run_failed_capture_case() (
   fi
 
   grep -q "detach --busid 9-3" "${root}/detach.log"
-  ! compgen -G "${root}/out/*.jsonl" >/dev/null
+  refute "preserved capture" compgen -G "${root}/out/*.jsonl"
   grep -q "^capture_status=dump_failed$" "${root}"/out/*.txt
   grep -q "^capture_preserved=false$" "${root}"/out/*.txt
   grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
   grep -q "^ring_remains_frozen=unknown$" "${root}"/out/*.txt
   [[ ! -f "${root}/armed" ]]
-  ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
+  refute "temporary file" compgen -G "${root}/out/.dwerty-incident.*"
 )
 
 # A dump that stops part way through leaves the partial header it wrote once the
@@ -195,7 +220,7 @@ run_partial_dump_case() (
   grep -q "^ring_rearmed=false$" "${root}"/out/*.txt
   grep -q "^ring_remains_frozen=true$" "${root}"/out/*.txt
   [[ ! -f "${root}/armed" ]]
-  ! compgen -G "${root}/out/.dwerty-incident.*" >/dev/null
+  refute "temporary file" compgen -G "${root}/out/.dwerty-incident.*"
   grep -q "detach --busid 9-3" "${root}/detach.log"
 )
 
