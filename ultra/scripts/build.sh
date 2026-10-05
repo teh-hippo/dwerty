@@ -22,7 +22,7 @@ ZMK_BRANCH="rtl8762g"
 # Pin to a known-good fork commit so builds are reproducible. We clone the
 # branch (cheap, shallow) then check this SHA out; if it is not in the shallow
 # history we fetch it explicitly.
-ZMK_SHA="101a23c678495ff2a08a86d59c7a7869350d39a6"
+ZMK_SHA="7f8d16732a3782e237915bff30a1f67de09268b7"
 BOARD="keychron"
 SHIELD="keychron_v6_ultra_ansi"
 SHIELD_DIR_REL="app/boards/shields/${SHIELD}"
