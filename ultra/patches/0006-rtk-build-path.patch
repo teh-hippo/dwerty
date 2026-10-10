@@ -1,0 +1,15 @@
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -267,6 +267,8 @@
+-add_custom_target(rtk_post_build ALL
+-  COMMAND ${_PREPEND_HEADER} -t app_code -p build/zephyr/zmk.bin -m 1 -c sha256 -b 15
+-  COMMAND ${CMAKE_COMMAND} -E rm -f build/zephyr/zmk_MP.bin
++# Dwerty packages a copy separately; leave the default build's image raw.
++# Use the actual binary directory when explicitly requesting RTK packaging.
++add_custom_target(rtk_post_build
++  COMMAND ${_PREPEND_HEADER} -t app_code -p "${CMAKE_BINARY_DIR}/zephyr/zmk.bin" -m 1 -c sha256 -b 15
++  COMMAND ${CMAKE_COMMAND} -E rm -f "${CMAKE_BINARY_DIR}/zephyr/zmk_MP.bin"
+   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+ )
+ add_dependencies(rtk_post_build zephyr_final)
