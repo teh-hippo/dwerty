@@ -11,7 +11,7 @@ manifest:
     - name: zmk
       remote: keychron
       # Pinned to the rtl8762g fork tip we build against (mirrors scripts/build.sh).
-      revision: 101a23c678495ff2a08a86d59c7a7869350d39a6
+      revision: 7f8d16732a3782e237915bff30a1f67de09268b7
       import: app/west.yml
   self:
     path: config
