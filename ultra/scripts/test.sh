@@ -17,7 +17,7 @@ IMAGE="docker.io/zmkfirmware/zmk-build-arm:4.1"
 ZMK_REPO="https://github.com/zmkfirmware/zmk.git"
 ZMK_SHA="931a36ff4ad0b30c8165024bbfc0286d05b74b53"
 KEYCHRON_REPO="https://github.com/Keychron/zmk.git"
-KEYCHRON_SHA="101a23c678495ff2a08a86d59c7a7869350d39a6"
+KEYCHRON_SHA="7f8d16732a3782e237915bff30a1f67de09268b7"
 TEST_PATCHES=(
   "${ULTRA_DIR}/patches/0003-preserve-press-layer-on-release.patch"
   "${ULTRA_DIR}/tests/patches/default-layer-test-hook.patch"
